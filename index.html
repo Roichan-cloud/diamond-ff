@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Diamond Gratis Free Fire 💎</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>emailjs.init("i63TMFLxk7CxJLfee");</script>
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, doc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDM4ZMnwe0ERm0M5NKG9wfFVNslxoXmlhA",
+    authDomain: "diamond-ff-id.firebaseapp.com",
+    projectId: "diamond-ff-id",
+    storageBucket: "diamond-ff-id.firebasestorage.app",
+    messagingSenderId: "972986074496",
+    appId: "1:972986074496:web:2b16d7a3a1677914302d65"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window._db = db;
+
+  // ===== COUNTER =====
+  let _currentCounterVal = -1;
+  function renderCounterDigits(num) {
+    const str = num.toLocaleString('id-ID');
+    const container = document.getElementById('counterDigits');
+    if (!container) return;
+    const oldStr = container.dataset.val || '';
+    container.dataset.val = str;
+    let html = '';
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      const oldIdx = i - (str.length - oldStr.length);
+      const oldCh = oldIdx >= 0 ? oldStr[oldIdx] : '';
+      const changed = ch !== oldCh && /\d/.test(ch);
+      html += `<span class="counter-digit-wrap"><span class="counter-digit${changed?' flip-in':''}">${ch}</span></span>`;
+    }
+    container.innerHTML = html;
+  }
+  function animateCounterFlip(start, target) {
+    if (target === start) { _currentCounterVal = target; renderCounterDigits(target); return; }
+    const duration = Math.min(2000, 700 + Math.abs(target - start) * 5);
+    const startTime = performance.now();
+    function step(now) {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const ease = 1 - Math.pow(2, -10 * progress);
+      const cur = Math.round(start + (target - start) * ease);
+      renderCounterDigits(cur);
+      if (progress < 1) requestAnimationFrame(step);
+      else { _currentCounterVal = target; renderCounterDigits(target); }
+    }
+    requestAnimationFrame(step);
+  }
+  function listenCounter() {
+    onSnapshot(doc(db, "config", "stats_ff"), (snap) => {
+      if (!snap.exists()) return;
+      const newVal = snap.data().totalKlaim || 0;
+      if (newVal !== _currentCounterVal) {
+        animateCounterFlip(_currentCounterVal < 0 ? newVal : _currentCounterVal, newVal);
+        _currentCounterVal = newVal;
+      }
+    });
+  }
+
+  // ===== LEADERBOARD =====
+  let _lbUnsub = null, _lbPrevKeys = [];
+  function maskUID(uid) {
+    if (!uid) return '???';
+    return uid.slice(0,3) + '****' + uid.slice(-2);
+  }
+  function buildLbItem(d, i, cls='') {
+    const medals = ['🥇','🥈','🥉'];
+    const rank = medals[i] || `<span style="font-weight:900;color:var(--muted);font-size:13px;">${i+1}</span>`;
+    const name = d.username || maskUID(d.uid||'');
+    const key = `${(d.uid||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`;
+    return `<div class="lb-item${cls?' '+cls:''}" data-key="${key}">
+      <div class="lb-rank-badge">${rank}</div>
+      <div class="lb-name">${name}</div>
+      <div class="lb-badge"><i class="fa-solid fa-gem ic-cyan"></i> ${d.diamond||100} 💎</div>
+    </div>`;
+  }
+  window._listenLeaderboard = function() {
+    if (_lbUnsub) { _lbUnsub(); _lbUnsub = null; }
+    _lbPrevKeys = [];
+    try {
+      const q = query(collection(db, "klaim_ff"), orderBy("timestamp","desc"), limit(5));
+      _lbUnsub = onSnapshot(q, (snap) => {
+        const docs = []; snap.forEach(d => docs.push(d.data()));
+        const el = document.getElementById('leaderboardList');
+        if (!el) return;
+        if (docs.length === 0) { el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;font-weight:700;padding:12px 0;">Jadilah yang pertama klaim! 🎉</div>'; _lbPrevKeys=[]; return; }
+        const newKeys = docs.map((d,i) => `${(d.uid||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`);
+        const isFirst = _lbPrevKeys.length === 0;
+        if (isFirst) {
+          el.innerHTML = docs.map((d,i) => buildLbItem(d,i,'lb-new')).join('');
+          el.querySelectorAll('.lb-item.lb-new').forEach((item,i) => item.style.animationDelay=`${i*80}ms`);
+          _lbPrevKeys = newKeys; return;
+        }
+        const addedKeys = newKeys.filter(k => !_lbPrevKeys.includes(k));
+        if (!addedKeys.length) { _lbPrevKeys=newKeys; return; }
+        const oldItems = Array.from(el.querySelectorAll('.lb-item'));
+        oldItems.slice(oldItems.length - Math.min(addedKeys.length, oldItems.length)).forEach(item => item.classList.add('lb-exit'));
+        setTimeout(() => {
+          el.innerHTML = docs.map((d,i) => { const key=`${(d.uid||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`; return buildLbItem(d,i,addedKeys.includes(key)?'lb-new':'lb-shift'); }).join('');
+          _lbPrevKeys = newKeys;
+        }, 420);
+      });
+    } catch(e) {}
+  };
+
+  // ===== FETCH UID FF =====
+  window._fetchUID = async function(uid) {
+    const targets = [
+      { url: `https://ff-info-api.vercel.app/api?uid=${uid}&region=id`,
+        parse: d => { const n=d?.basicInfo?.nickname||d?.name||null; return n?{username:n,avatar:d?.basicInfo?.headPic||d?.avatar||null}:null; } },
+      { url: `https://freefireinfo.vercel.app/api?uid=${uid}`,
+        parse: d => { const n=d?.name||d?.username||d?.playerName||null; return n?{username:n,avatar:d?.avatar||null}:null; } },
+      { url: `https://ff-api.vercel.app/player?uid=${uid}&region=id`,
+        parse: d => { const n=d?.nickname||d?.name||null; return n?{username:n,avatar:d?.avatar||null}:null; } },
+    ];
+    const proxies = [
+      u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      u => u,
+    ];
+    for (const target of targets) {
+      for (const proxy of proxies) {
+        try {
+          const r = await fetch(proxy(target.url), { signal: AbortSignal.timeout(7000) });
+          if (!r.ok) continue;
+          const d = await r.json();
+          const result = target.parse(d);
+          if (result && result.username) return { ok: true, ...result };
+        } catch(e) {}
+      }
+    }
+    return { ok: false, reason: 'api_down' };
+  };
+
+  // ===== KUIS =====
+  window._loadKuis = async function() {
+    try {
+      const snap = await getDoc(doc(db, "config", "kuis"));
+      if (!snap.exists()) return null;
+      return snap.data().soal || null;
+    } catch(e) { return null; }
+  };
+
+  // ===== CEK UID =====
+  window._cekUID = async function(uid) {
+    try {
+      const wl = await getDocs(query(collection(db, 'whitelist_ff'), where('uidLower','==',uid.toLowerCase())));
+      if (!wl.empty) return { status: 'new' };
+      const q = await getDocs(query(collection(db,'klaim_ff'), where('uidLower','==',uid.toLowerCase())));
+      if (q.empty) return { status: 'new' };
+      const qReq = await getDocs(query(collection(db,'permintaan_ff'), where('uidLower','==',uid.toLowerCase()), where('status','==','approved')));
+      if (!qReq.empty) return { status: 'new' };
+      return { status: 'exists' };
+    } catch(e) { return { status: 'new' }; }
+  };
+
+  // ===== CEK BLACKLIST =====
+  window._cekBlacklist = async function(uid) {
+    try {
+      const snap = await getDocs(query(collection(db,'blacklist_ff'), where('uidLower','==',uid.toLowerCase())));
+      if (snap.empty) return null;
+      return snap.docs[0].data().alasan || '';
+    } catch(e) { return null; }
+  };
+
+  // ===== SAVE KLAIM =====
+  window._saveKlaim = async function(uid, username, avatar, diamond, refKode) {
+    try {
+      await addDoc(collection(db,"klaim_ff"), { uid, uidLower:uid.toLowerCase(), username, avatar, diamond, timestamp:serverTimestamp(), tanggal:new Date().toLocaleString('id-ID'), refKode:refKode||'' });
+      await setDoc(doc(db,"config","stats_ff"), { totalKlaim: increment(1) }, { merge:true });
+      // Proses referral
+      if (refKode) {
+        try {
+          const refSnap = await getDocs(query(collection(db,'referral_ff'), where('code','==',refKode.toUpperCase())));
+          if (!refSnap.empty) {
+            await updateDoc(refSnap.docs[0].ref, { total: increment(1), poin: increment(1) });
+            await addDoc(collection(db,'referral_log_ff'), { referrer: refSnap.docs[0].data().username, claimer: username, timestamp: serverTimestamp() });
+          }
+        } catch(e2) {}
+      }
+      // Tandai permintaan approved sebagai used
+      try {
+        const qReq = await getDocs(query(collection(db,'permintaan_ff'), where('uidLower','==',uid.toLowerCase()), where('status','==','approved')));
+        qReq.forEach(async d => await updateDoc(doc(db,'permintaan_ff',d.id), { status:'used' }));
+      } catch(e2) {}
+    } catch(e) { console.error('saveKlaim error:',e); }
+  };
+
+  // ===== KIRIM PERMINTAAN =====
+  window._kirimPermintaan = async function(uid, username, alasan) {
+    try {
+      await addDoc(collection(db,"permintaan_ff"), { uid, uidLower:uid.toLowerCase(), username, alasan, timestamp:serverTimestamp(), tanggal:new Date().toLocaleString('id-ID'), status:'pending' });
+      return true;
+    } catch(e) { return false; }
+  };
+
+  // ===== KIRIM PESAN =====
+  window._kirimPesan = async function(uid, pesan) {
+    await addDoc(collection(db,'pesan_ff'), { uid:uid||'Anonim', pesan, dibaca:false, timestamp:serverTimestamp() });
+  };
+
+  // ===== RESET LIMIT =====
+  window._cekResetLimit = async function(uid) {
+    try {
+      const snap = await getDoc(doc(db,'config','reset_rl_ff_'+uid.toLowerCase()));
+      if (snap.exists() && snap.data().aktif) {
+        localStorage.removeItem('ff_submits');
+        await setDoc(doc(db,'config','reset_rl_ff_'+uid.toLowerCase()), { aktif:false }, { merge:true });
+        return true;
+      }
+    } catch(e) {}
+    return false;
+  };
+  window._kirimPermintaanRL = async function(uid, alasan) {
+    try {
+      await addDoc(collection(db,'permintaan_rl_ff'), { uid, uidLower:uid.toLowerCase(), alasan:alasan||'-', timestamp:serverTimestamp(), tanggal:new Date().toLocaleString('id-ID'), status:'pending' });
+      return { ok:true };
+    } catch(e) { return { ok:false, msg:e.message }; }
+  };
+
+  // ===== REFERRAL =====
+  function genCode(uid) {
+    let hash = 0;
+    for (let i=0;i<uid.length;i++) hash = ((hash<<5)-hash)+uid.charCodeAt(i);
+    hash = Math.abs(hash);
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = uid.slice(0,2).toUpperCase().replace(/[^A-Z0-9]/g,'');
+    while(code.length<2) code='F'+code;
+    code += String(hash).slice(-5).padStart(5,'0');
+    return code.slice(0,7);
+  }
+  window._getOrCreateReferral = async function(uid, username) {
+    try {
+      const refDoc = doc(db,'referral_ff',uid.toLowerCase());
+      const snap = await getDoc(refDoc);
+      if (snap.exists()) return snap.data();
+      const code = genCode(uid);
+      const data = { uid, uidLower:uid.toLowerCase(), username, code, total:0, poin:0, timestamp:serverTimestamp() };
+      await setDoc(refDoc, data);
+      return data;
+    } catch(e) { return null; }
+  };
+  window._cekKodeRef = async function(code) {
+    try {
+      const snap = await getDocs(query(collection(db,'referral_ff'), where('code','==',code.toUpperCase())));
+      if (snap.empty) return null;
+      return { id:snap.docs[0].id, ...snap.docs[0].data() };
+    } catch(e) { return null; }
+  };
+
+  // ===== EVENT =====
+  window._listenEvent = function() {
+    onSnapshot(doc(db,"config","event_ff"), (snap) => {
+      if (!snap.exists()||!snap.data().active) { hideEvent(); return; }
+      showEvent(snap.data());
+    });
+  };
+  window._klaimEvent = async function(uid, username, avatar) {
+    try {
+      const snap = await getDoc(doc(db,"config","event_ff"));
+      if (!snap.exists()||!snap.data().active) return { ok:false, msg:'Event sudah berakhir!' };
+      const data = snap.data();
+      if ((data.pesertaCount||0) >= data.maxPeserta) return { ok:false, msg:'Slot event sudah penuh!' };
+      const exists = await getDocs(query(collection(db,"event_klaim_ff"), where('uidLower','==',uid.toLowerCase())));
+      if (!exists.empty) return { ok:false, msg:'Kamu sudah klaim event ini!' };
+      await addDoc(collection(db,"event_klaim_ff"), { uid, uidLower:uid.toLowerCase(), username, avatar, diamond:data.diamond, eventId:data.eventId, timestamp:serverTimestamp(), tanggal:new Date().toLocaleString('id-ID') });
+      await setDoc(doc(db,"config","event_ff"), { pesertaCount:(data.pesertaCount||0)+1 }, { merge:true });
+      return { ok:true, diamond:data.diamond };
+    } catch(e) { return { ok:false, msg:'Gagal klaim event.' }; }
+  };
+  window._listenPemenangEvent = function() {
+    onSnapshot(query(collection(db,"event_klaim_ff"), orderBy("timestamp","desc"), limit(10)), (snap) => {
+      const docs=[]; snap.forEach(d=>docs.push(d.data()));
+      const section = document.getElementById('pemenangEventSection');
+      const list = document.getElementById('pemenangList');
+      if (!section||!list) return;
+      if (!docs.length) { section.classList.add('hidden'); return; }
+      section.classList.remove('hidden');
+      const medals=['🥇','🥈','🥉'];
+      list.innerHTML = docs.map((d,i) => `<div style="display:flex;align-items:center;gap:10px;background:white;border-radius:12px;padding:10px 12px;border:1.5px solid #ffe082;margin-bottom:6px;">
+        <div style="width:26px;text-align:center;font-size:16px;">${medals[i]||`<span style='font-weight:900;color:var(--muted);'>${i+1}</span>`}</div>
+        <div style="flex:1;font-size:14px;font-weight:800;color:var(--text);">${d.username||maskUID(d.uid||'')}</div>
+        <div style="font-size:12px;font-weight:800;color:#f59e0b;"><i class="fa-solid fa-gem ic-cyan"></i> ${d.diamond||'?'} 💎</div>
+      </div>`).join('');
+    });
+  };
+
+  // ===== LISTENERS =====
+  window.addEventListener('load', () => {
+    window._listenLeaderboard();
+    window._listenEvent();
+    window._listenPemenangEvent();
+    listenCounter();
+    // Settings
+    onSnapshot(doc(db,"config","settings_ff"), (snap) => {
+      if (snap.exists()) {
+        window._maxPercobaan = snap.data().maxPercobaan || 3;
+        window._diamondJumlah = snap.data().diamondJumlah || 100;
+        const el = document.getElementById('diamondJumlahDisplay');
+        if (el) el.textContent = window._diamondJumlah;
+      }
+    });
+    // Broadcast
+    onSnapshot(doc(db,"config","broadcast_ff"), (snap) => {
+      const el = document.getElementById('broadcastBanner');
+      if (!el) return;
+      if (snap.exists()&&snap.data().aktif&&snap.data().pesan) {
+        const warna = { info:'#3b82f6', peringatan:'#f59e0b', darurat:'#ef4444' };
+        el.style.background = warna[snap.data().kategori]||'#3b82f6';
+        document.getElementById('broadcastPesan').textContent = snap.data().pesan;
+        showBannerAnim(el);
+      } else { hideBannerAnim(el); }
+    });
+    // Pengumuman
+    onSnapshot(doc(db,"config","pengumuman_ff"), (snap) => {
+      const el = document.getElementById('pengumumanBanner');
+      if (!el) return;
+      if (snap.exists()&&snap.data().aktif&&snap.data().pesan) {
+        document.getElementById('pengumumanText').textContent = snap.data().pesan;
+        showBannerAnim(el);
+      } else { hideBannerAnim(el); }
+    });
+    // Maintenance
+    onSnapshot(doc(db,"config","maintenance_ff"), (snap) => {
+      const aktif = snap.exists()&&snap.data().aktif;
+      const banner = document.getElementById('maintenanceBanner');
+      const btn = document.getElementById('s1Btn');
+      if (aktif) {
+        document.getElementById('maintenancePesan').textContent = snap.data().pesan||'Sedang dalam perbaikan.';
+        banner.classList.remove('hidden');
+        if (btn) { btn.disabled=true; btn.style.opacity='.5'; }
+        window._maintenanceAktif = true;
+      } else {
+        banner.classList.add('hidden');
+        if (btn) { btn.disabled=false; btn.style.opacity=''; }
+        window._maintenanceAktif = false;
+      }
+    });
+    // Load referral dari URL
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) { const inp=document.getElementById('refInput'); if(inp){inp.value=ref.toUpperCase();validateRef(ref);} }
+  });
+</script>
+<style>
+  :root {
+    --primary: #00c853; --primary2: #00e676;
+    --bg: #f0fff6; --white: #ffffff;
+    --border: #c8f0d8; --text: #1a2e1f; --muted: #5a8a6a;
+    --shadow: 0 4px 20px rgba(0,200,83,0.10);
+    --card-radius: 20px;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Nunito',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  /* LOADING */
+  #loadingScreen { position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .5s ease; }
+  #loadingScreen.fade-out { opacity:0;pointer-events:none; }
+  .ls-logo { width:80px;height:80px;border-radius:22px;animation:lsBounce 1s ease-in-out infinite alternate;box-shadow:0 8px 28px rgba(0,200,83,.3); }
+  @keyframes lsBounce { from{transform:translateY(0) scale(1)} to{transform:translateY(-14px) scale(1.04)} }
+  .ls-title { font-size:22px;font-weight:900;color:var(--primary); }
+  .ls-dots { display:flex;gap:6px; }
+  .ls-dot { width:8px;height:8px;background:var(--primary);border-radius:50%;animation:dotB 1.2s ease-in-out infinite; }
+  .ls-dot:nth-child(2){animation-delay:.2s} .ls-dot:nth-child(3){animation-delay:.4s}
+  @keyframes dotB { 0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-8px)} }
+
+  /* HEADER */
+  .header { background:linear-gradient(135deg,#00c853,#00e676);padding:22px 18px 18px;text-align:center;position:relative;overflow:hidden; }
+  .header::before { content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;background:rgba(255,255,255,.08);border-radius:50%; }
+  .header::after { content:'';position:absolute;bottom:-30px;left:-30px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%; }
+  .header-logo { width:64px;height:64px;border-radius:18px;margin-bottom:10px;box-shadow:0 6px 20px rgba(0,0,0,.2);border:3px solid rgba(255,255,255,.4); }
+  .header-title { font-size:1.6rem;font-weight:900;color:white;letter-spacing:-.5px;text-shadow:0 2px 8px rgba(0,0,0,.15); }
+  .header-sub { font-size:13px;font-weight:700;color:rgba(255,255,255,.85);margin-top:4px; }
+  .counter-box { display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.2);backdrop-filter:blur(8px);border:1.5px solid rgba(255,255,255,.3);border-radius:50px;padding:7px 16px;margin-top:12px;font-size:13px;font-weight:800;color:white; }
+  .counter-dot { width:7px;height:7px;background:white;border-radius:50%;animation:pulse 1.5s ease-in-out infinite; }
+  .counter-digits { display:inline-flex;align-items:center;gap:1px; }
+  .counter-digit-wrap { position:relative;overflow:hidden;height:1.25em;display:inline-block;min-width:.6em;text-align:center; }
+  .counter-digit { display:block;font-size:15px;font-weight:900;line-height:1.25em;color:white; }
+  .counter-digit.flip-in { animation:digitSlotIn .42s cubic-bezier(.22,1,.36,1) both; }
+  @keyframes digitSlotIn { 0%{transform:translateY(-110%);opacity:0}60%{transform:translateY(8%);opacity:1}80%{transform:translateY(-4%)}100%{transform:translateY(0);opacity:1} }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)} }
+
+  /* MAIN */
+  .main { max-width:440px;margin:0 auto;padding:16px 16px 40px; }
+
+  /* BANNER */
+  .broadcast-banner { border-radius:16px;padding:12px 16px;margin-bottom:14px;display:flex;gap:10px;align-items:center;color:white;font-size:13px;font-weight:700; }
+  .pengumuman-banner { background:linear-gradient(135deg,#fff8e1,#fff3cd);border:2px solid #ffd54f;border-radius:16px;padding:13px 16px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-start; }
+  .maintenance-banner { background:linear-gradient(135deg,#ff4757,#c0392b);border-radius:16px;padding:16px;margin-bottom:14px;color:white;animation:mPulse 2.5s ease-in-out infinite; }
+  @keyframes mPulse { 0%,100%{box-shadow:0 4px 20px rgba(255,71,87,.35)}50%{box-shadow:0 4px 36px rgba(255,71,87,.6)} }
+  @keyframes bannerIn { from{opacity:0;transform:translateY(-20px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)} }
+  @keyframes bannerOut { from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-14px)} }
+  .banner-in { animation:bannerIn .4s cubic-bezier(.22,1,.36,1) both; }
+  .banner-out { animation:bannerOut .28s ease-in both; }
+
+  /* LEADERBOARD */
+  .lb-card { background:var(--white);border:1.5px solid var(--border);border-radius:var(--card-radius);padding:18px;margin:0 0 16px;box-shadow:var(--shadow); }
+  .lb-title { font-size:14px;font-weight:900;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px; }
+  #leaderboardList { overflow:hidden; }
+  .lb-item { display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border); }
+  .lb-item:last-child { border-bottom:none; }
+  .lb-rank-badge { width:28px;text-align:center;font-size:16px;flex-shrink:0; }
+  .lb-name { flex:1;font-size:14px;font-weight:800;color:var(--text); }
+  .lb-badge { font-size:12px;font-weight:800;color:var(--primary);white-space:nowrap; }
+  @keyframes lbSlideIn { from{opacity:0;transform:translateY(-48px)}to{opacity:1;transform:translateY(0)} }
+  @keyframes lbSlideDown { from{transform:translateY(0)}to{transform:translateY(100%)} }
+  @keyframes lbShiftDown { from{transform:translateY(-100%)}to{transform:translateY(0)} }
+  .lb-item.lb-new { animation:lbSlideIn .5s cubic-bezier(.22,1,.36,1) both; }
+  .lb-item.lb-shift { animation:lbShiftDown .5s cubic-bezier(.22,1,.36,1) both; }
+  .lb-item.lb-exit { animation:lbSlideDown .4s ease-in both; }
+
+  /* EVENT */
+  .event-banner { background:linear-gradient(135deg,#ff4757,#ff6b35);border-radius:var(--card-radius);padding:18px;margin-bottom:16px;color:white;position:relative;overflow:hidden;box-shadow:0 8px 28px rgba(255,71,87,.35); }
+  .event-banner::before { content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:rgba(255,255,255,.08);border-radius:50%; }
+
+  /* PEMENANG EVENT */
+  .pemenang-section { background:linear-gradient(135deg,#fff8e1,#fffde7);border:2px solid #ffe082;border-radius:var(--card-radius);padding:18px;margin-bottom:16px; }
+
+  /* CARD STEP */
+  .card { background:var(--white);border:1.5px solid var(--border);border-radius:var(--card-radius);padding:22px 18px;margin-bottom:16px;box-shadow:var(--shadow); }
+  .card.enter-right { animation:slideInRight .4s cubic-bezier(.22,1,.36,1) both; }
+  .card.enter-left  { animation:slideInLeft .4s cubic-bezier(.22,1,.36,1) both; }
+  .card.exit-left   { animation:slideOutLeft .22s ease-in both; }
+  .card.exit-right  { animation:slideOutRight .22s ease-in both; }
+  @keyframes slideInRight  { from{opacity:0;transform:translateX(72px) scale(.97)}to{opacity:1;transform:translateX(0) scale(1)} }
+  @keyframes slideInLeft   { from{opacity:0;transform:translateX(-72px) scale(.97)}to{opacity:1;transform:translateX(0) scale(1)} }
+  @keyframes slideOutLeft  { from{opacity:1;transform:translateX(0) scale(1)}to{opacity:0;transform:translateX(-50px) scale(.97)} }
+  @keyframes slideOutRight { from{opacity:1;transform:translateX(0) scale(1)}to{opacity:0;transform:translateX(50px) scale(.97)} }
+  .c-title { font-size:1.1rem;font-weight:900;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:8px; }
+  .c-sub { font-size:12px;font-weight:700;color:var(--muted);margin-bottom:16px; }
+
+  /* STEP INDICATOR */
+  .steps { display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:18px; }
+  .step-dot { width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;border:2px solid var(--border);background:var(--bg);color:var(--muted);transition:.3s; }
+  .step-dot.active { background:var(--primary);border-color:var(--primary);color:white;box-shadow:0 0 0 4px rgba(0,200,83,.2); }
+  .step-dot.done { background:var(--primary2);border-color:var(--primary2);color:white; }
+  .step-line { flex:1;height:2px;background:var(--border);max-width:40px;transition:.3s; }
+  .step-line.done { background:var(--primary); }
+
+  /* FIELD */
+  .field { margin-bottom:16px; }
+  .field label { display:block;font-size:12px;font-weight:800;color:var(--text);margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px; }
+  .field input,.field textarea { width:100%;padding:14px 16px;background:var(--bg);border:2px solid var(--border);border-radius:14px;color:var(--text);font-family:'Nunito',sans-serif;font-size:16px;font-weight:700;outline:none;transition:border-color .2s; }
+  .field input:focus,.field textarea:focus { border-color:var(--primary);box-shadow:0 0 0 3px rgba(0,200,83,.12);background:var(--white); }
+  .field input.err { border-color:#ff4757;animation:shake .35s ease; }
+  @keyframes shake { 0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)} }
+  .err-msg { font-size:12px;font-weight:700;color:#ff4757;margin-top:5px;display:none; }
+  .err-msg.show { display:block; }
+
+  /* AVATAR PREVIEW */
+  .uid-preview { display:flex;align-items:center;gap:12px;background:var(--bg);border:2px solid var(--border);border-radius:14px;padding:10px 14px;margin-top:8px;transition:border-color .3s; }
+  .uid-preview.found { border-color:var(--primary);background:#f0fff6; }
+  .uid-preview.notfound { border-color:#ef4444;background:#fff0f0; }
+  .uid-avatar { width:40px;height:40px;border-radius:10px;object-fit:cover;flex-shrink:0; }
+  .uid-avatar-ph { width:40px;height:40px;border-radius:10px;background:var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--muted); }
+  @keyframes avatarPop { from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1} }
+  .uid-avatar.popped { animation:avatarPop .3s cubic-bezier(.22,1,.36,1) both; }
+
+  /* KUIS */
+  .kuis-wrap { }
+  .kuis-progress { display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px; }
+  .kuis-bar-bg { background:var(--border);border-radius:50px;height:7px;margin-bottom:16px;overflow:hidden; }
+  .kuis-bar { height:100%;background:linear-gradient(90deg,var(--primary),var(--primary2));border-radius:50px;transition:width .5s cubic-bezier(.22,1,.36,1); }
+  .kuis-soal { font-size:15px;font-weight:800;color:var(--text);margin-bottom:14px;line-height:1.5; }
+  .kuis-options { display:flex;flex-direction:column;gap:8px; }
+  .kuis-opt { padding:12px 16px;background:var(--bg);border:2px solid var(--border);border-radius:12px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;color:var(--text);cursor:pointer;text-align:left;transition:all .2s;width:100%; }
+  .kuis-opt:hover { border-color:var(--primary);background:#f0fff6; }
+  .kuis-opt.correct { border-color:#00c853;background:#e8fff2;color:#0a6e3a;animation:optPop .3s cubic-bezier(.22,1,.36,1); }
+  .kuis-opt.wrong { border-color:#ef4444;background:#fff0f0;color:#c0392b;animation:optShake .3s ease; }
+  .kuis-opt.reveal-correct { border-color:#00c853;background:#e8fff2;color:#0a6e3a; }
+  .kuis-opt:disabled { cursor:not-allowed; }
+  @keyframes optPop { from{transform:scale(.97)}to{transform:scale(1)} }
+  @keyframes optShake { 0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)} }
+  .kuis-feedback { font-size:13px;font-weight:700;text-align:center;padding:10px;border-radius:10px;margin-top:12px;display:none; }
+  .kuis-feedback.show { display:block; }
+  .kuis-feedback.ok { background:#e8fff2;color:#0a6e3a; }
+  .kuis-feedback.fail { background:#fff0f0;color:#c0392b; }
+
+  /* BTN */
+  .btn { width:100%;padding:15px;border:none;border-radius:14px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;transition:transform .18s,opacity .2s;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px;position:relative;overflow:hidden; }
+  .btn .ripple { position:absolute;border-radius:50%;background:rgba(255,255,255,.4);transform:scale(0);animation:rippleAnim .55s linear;pointer-events:none; }
+  @keyframes rippleAnim { to{transform:scale(4);opacity:0} }
+  .btn:hover:not(:disabled) { transform:translateY(-2px); }
+  .btn:disabled { opacity:.5;cursor:not-allowed;transform:none; }
+  .btn-green { background:linear-gradient(135deg,#00c853,#00e676);color:white; }
+  .btn-orange { background:linear-gradient(135deg,#ff9f43,#ff6b35);color:white; }
+  .btn-ghost { background:var(--bg);color:var(--muted);border:1.5px solid var(--border); }
+  .btn-wa { background:linear-gradient(135deg,#25d366,#128c7e);color:white; }
+  .alert { display:flex;gap:10px;padding:12px 14px;border-radius:12px;font-size:13px;font-weight:700;margin-bottom:14px;align-items:flex-start; }
+  .a-ok { background:#e8fff2;border:1.5px solid #b2f5d0;color:#0a6e3a; }
+  .a-warn { background:#fff8e6;border:1.5px solid #ffd88a;color:#925200; }
+  .a-info { background:#eff6ff;border:1.5px solid #bfdbfe;color:#1e40af; }
+  .ic-green { color:#00c853; } .ic-cyan { color:#00bcd4; } .ic-amber { color:#f59e0b; }
+  .ic-red { color:#ef4444; } .ic-blue { color:#3b82f6; } .ic-indigo { color:#6366f1; }
+  .ic-slate { color:#64748b; } .ic-yellow { color:#fbbf24; } .ic-gold { color:#ffd700; }
+  .hidden { display:none!important; }
+
+  /* WIN */
+  .win-wrap { text-align:center;padding:8px 0 14px; }
+  .confetti-row { font-size:24px;letter-spacing:5px;animation:bob 2s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)} }
+  .trophy { font-size:72px;animation:tIn .6s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes tIn { from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1} }
+  .win-amount { background:linear-gradient(135deg,#f0fff6,#e0fff0);border:2px solid var(--border);border-radius:18px;padding:20px;margin:14px 0;text-align:center; }
+  .win-diamond { font-size:3.2rem;font-weight:900;color:var(--primary);letter-spacing:-2px; }
+
+  /* REFERRAL */
+  .ref-box { background:linear-gradient(135deg,#f0fff6,#e8fff2);border:2px solid #b2f5d0;border-radius:16px;padding:14px 16px;margin-top:14px; }
+  .ref-code { font-size:22px;font-weight:900;color:var(--primary);letter-spacing:3px;text-align:center;padding:8px;background:white;border-radius:10px;border:2px dashed var(--primary);margin:8px 0;cursor:pointer;transition:transform .18s; }
+  .ref-code:active { transform:scale(.97); }
+  .ref-stats { display:flex;gap:10px;margin-top:10px; }
+  .ref-stat { flex:1;background:white;border-radius:10px;padding:8px;text-align:center;border:1.5px solid var(--border); }
+  .ref-stat-num { font-size:20px;font-weight:900;color:var(--primary); }
+  .ref-stat-lbl { font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px; }
+
+  /* RATE LIMIT */
+  .rl-card { background:var(--white);border:2px solid #ffd0d0;border-radius:var(--card-radius);padding:20px 18px;margin-bottom:16px;box-shadow:var(--shadow); }
+
+  /* AVATAR CARD */
+  .avatar-card { display:flex;align-items:center;gap:12px;background:var(--bg);border:1.5px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:16px; }
+  .avatar-card img { width:48px;height:48px;border-radius:12px;object-fit:cover; }
+  .u-name { font-size:16px;font-weight:900;color:var(--text); }
+  .u-sub { font-size:12px;font-weight:700;color:var(--muted);margin-top:2px; }
+
+  /* BADGE */
+  .badge-green { background:#e8fff2;color:#0a6e3a;border:1px solid #b2f5d0;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800; }
+
+  /* HP FIELD */
+  .hp-field { position:absolute;left:-9999px;opacity:0;pointer-events:none; }
+
+  /* LOADING OVERLAY */
+  .loading-overlay { position:fixed;inset:0;background:rgba(240,255,246,.92);backdrop-filter:blur(6px);z-index:998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px; }
+  .loading-spinner { width:52px;height:52px;border:5px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .loading-text { font-size:14px;font-weight:800;color:var(--muted); }
+
+  /* DIALOG */
+  #ixDialogOverlay { position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(5px);z-index:2000;display:none;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .2s; }
+  #ixDialogOverlay.show { opacity:1; }
+  #ixDialogBox { background:white;border-radius:22px;padding:24px 20px;max-width:320px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.16);transform:scale(.93);transition:transform .25s cubic-bezier(.34,1.3,.64,1); }
+  #ixDialogOverlay.show #ixDialogBox { transform:scale(1); }
+  #ixDialogIcon { font-size:32px;text-align:center;margin-bottom:8px; }
+  #ixDialogTitle { font-size:1rem;font-weight:900;text-align:center;margin-bottom:6px; }
+  #ixDialogMsg { font-size:13px;font-weight:600;color:var(--muted);text-align:center;line-height:1.6;margin-bottom:16px;white-space:pre-line; }
+  #ixDialogOk { width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--primary2));color:white;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;cursor:pointer; }
+
+  footer { text-align:center;padding:20px;font-size:12px;font-weight:700;color:var(--muted); }
+  footer a { color:var(--primary);text-decoration:none; }
+
+  @media(max-width:480px) { .main { padding:12px 12px 40px; } .header-title { font-size:1.4rem; } }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingScreen">
+  <img src="ff-logo.png" class="ls-logo" alt="FF" onerror="this.style.background='linear-gradient(135deg,#00c853,#00e676)';this.style.padding='14px'" />
+  <div class="ls-title">💎 Diamond Gratis FF</div>
+  <div class="ls-dots"><div class="ls-dot"></div><div class="ls-dot"></div><div class="ls-dot"></div></div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay" class="loading-overlay hidden">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loadingMsg">Memproses...</div>
+</div>
+
+<!-- DIALOG -->
+<div id="ixDialogOverlay" style="display:none;">
+  <div id="ixDialogBox">
+    <div id="ixDialogIcon">💎</div>
+    <div id="ixDialogTitle">Info</div>
+    <div id="ixDialogMsg"></div>
+    <button id="ixDialogOk">Oke</button>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <img src="ff-logo.png" class="header-logo" alt="Free Fire" onerror="this.style.display='none'" />
+  <div class="header-title">💎 Diamond Gratis</div>
+  <div class="header-sub">Free Fire Indonesia — 100% Gratis!</div>
+  <div class="counter-box">
+    <div class="counter-dot"></div>
+    <span style="font-size:12px;">Sudah diklaim:</span>
+    <span class="counter-digits" id="counterDigits"><span class="counter-digit-wrap"><span class="counter-digit">0</span></span></span>
+    <span style="font-size:12px;">orang</span>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- MAINTENANCE BANNER -->
+  <div id="maintenanceBanner" class="maintenance-banner hidden">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <i class="fa-solid fa-triangle-exclamation" style="font-size:20px;"></i>
+      <div><div style="font-size:14px;font-weight:900;">Kesalahan Teknis</div><div style="font-size:11px;opacity:.8;">Klaim sementara tidak tersedia</div></div>
+    </div>
+    <div style="background:rgba(0,0,0,.2);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:700;" id="maintenancePesan"></div>
+  </div>
+
+  <!-- BROADCAST BANNER -->
+  <div id="broadcastBanner" class="broadcast-banner hidden">
+    <i class="fa-solid fa-bullhorn" style="font-size:18px;flex-shrink:0;"></i>
+    <span id="broadcastPesan"></span>
+  </div>
+
+  <!-- PENGUMUMAN BANNER -->
+  <div id="pengumumanBanner" class="pengumuman-banner hidden">
+    <i class="fa-solid fa-bell" style="color:#f59e0b;font-size:18px;flex-shrink:0;margin-top:1px;"></i>
+    <span id="pengumumanText" style="font-size:13px;font-weight:700;color:#7c4e00;"></span>
+  </div>
+
+  <!-- EVENT BANNER -->
+  <div id="eventBanner" class="event-banner hidden">
+    <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.2);border-radius:50px;padding:3px 10px;font-size:11px;font-weight:800;margin-bottom:8px;">
+      <div style="width:6px;height:6px;background:#ffeb3b;border-radius:50%;animation:pulse 1s ease-in-out infinite;"></div>
+      EVENT AKTIF
+    </div>
+    <div style="font-size:13px;font-weight:800;margin-bottom:4px;">Flash Sale Diamond! ⚡</div>
+    <div style="font-size:2.8rem;font-weight:900;letter-spacing:-2px;line-height:1;" id="eventDiamond">?</div>
+    <div style="font-size:13px;opacity:.9;margin-top:4px;">💎 Diamond — Sisa slot: <strong id="eventSisa" style="color:#ffeb3b;">?</strong>/<span id="eventMax">?</span></div>
+    <div style="background:rgba(255,255,255,.15);border-radius:8px;height:8px;margin:10px 0;overflow:hidden;">
+      <div id="eventProgressBar" style="height:100%;background:#ffeb3b;border-radius:8px;transition:width .8s;width:0%;"></div>
+    </div>
+    <div id="eventCountdownWrap" class="hidden" style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.2);border-radius:50px;padding:4px 12px;font-size:12px;font-weight:800;margin-top:4px;">
+      <i class="fa-solid fa-clock"></i> <span id="eventCountdown">--:--</span>
+    </div>
+    <button class="btn" id="eventBtn" onclick="klaimEvent()" style="background:white;color:#ff4757;margin-top:14px;"><i class="fa-solid fa-bolt" style="color:#fbbf24;"></i> Klaim Event Sekarang!</button>
+  </div>
+
+  <!-- PEMENANG EVENT -->
+  <div id="pemenangEventSection" class="pemenang-section hidden">
+    <div style="font-size:13px;font-weight:900;color:#92400e;margin-bottom:12px;display:flex;align-items:center;gap:8px;"><i class="fa-solid fa-crown" style="color:#f59e0b;"></i> Pemenang Event <span id="pemenangEventId" style="font-size:11px;font-weight:700;"></span></div>
+    <div id="pemenangList"></div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div class="lb-card">
+    <div class="lb-title"><i class="fa-solid fa-ranking-star ic-amber"></i> Klaim Terbaru</div>
+    <div id="leaderboardList"><div style="text-align:center;color:var(--muted);font-size:13px;font-weight:700;padding:12px 0;">Memuat...</div></div>
+  </div>
+
+  <!-- CARA KERJA -->
+  <div id="frontContent">
+    <div class="card" style="margin-bottom:16px;">
+      <div class="c-title"><i class="fa-solid fa-circle-info ic-blue"></i> Cara Kerja</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="width:28px;height:28px;background:linear-gradient(135deg,#00c853,#00e676);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:white;flex-shrink:0;">1</div>
+          <div><div style="font-size:13px;font-weight:800;">Masukkan UID Free Fire</div><div style="font-size:12px;font-weight:600;color:var(--muted);">Kami deteksi username kamu otomatis</div></div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="width:28px;height:28px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:white;flex-shrink:0;">2</div>
+          <div><div style="font-size:13px;font-weight:800;">Jawab Kuis Tentang Free Fire</div><div style="font-size:12px;font-weight:600;color:var(--muted);">Jawab semua soal dengan benar</div></div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="width:28px;height:28px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:white;flex-shrink:0;">3</div>
+          <div><div style="font-size:13px;font-weight:800;">Diamond Dikirim!</div><div style="font-size:12px;font-weight:600;color:var(--muted);">Diamond masuk dalam 7-10 hari kerja</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INFO JUMLAH -->
+    <div style="background:linear-gradient(135deg,#f0fff6,#e8fff2);border:2px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;">
+      <div style="font-size:36px;font-weight:900;color:var(--primary);" id="diamondJumlahDisplay">100</div>
+      <div>
+        <div style="font-size:12px;font-weight:900;color:var(--text);">💎 Diamond Gratis</div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);">Per klaim · langsung ke akun FF kamu</div>
+      </div>
+    </div>
+
+    <!-- FORM KIRIM PESAN -->
+    <div class="card" style="margin-bottom:0;">
+      <div class="c-title"><i class="fa-solid fa-envelope ic-indigo"></i> Kirim Pesan ke Admin</div>
+      <div class="field" style="margin-top:10px;">
+        <label>UID Kamu (opsional)</label>
+        <input type="text" id="pesanUID" placeholder="Contoh: 123456789" />
+      </div>
+      <div class="field">
+        <label>Pesan</label>
+        <textarea id="pesanIsi" placeholder="Tulis pesanmu di sini..."></textarea>
+      </div>
+      <button class="btn btn-ghost" onclick="kirimPesan()" style="margin-top:0;"><i class="fa-solid fa-paper-plane ic-indigo"></i> Kirim Pesan</button>
+      <div id="pesanStatus" style="font-size:12px;font-weight:700;text-align:center;margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- ===== CARDS ===== -->
+
+  <!-- STEP 1 -->
+  <div id="s1" class="card">
+    <div class="steps">
+      <div class="step-dot active" id="dot1">1</div>
+      <div class="step-line" id="line1"></div>
+      <div class="step-dot" id="dot2">2</div>
+      <div class="step-line" id="line2"></div>
+      <div class="step-dot" id="dot3">3</div>
+    </div>
+    <div class="c-title"><i class="fa-solid fa-gamepad ic-green"></i> Masukkan UID Free Fire</div>
+    <div class="c-sub">Temukan UID kamu di profil Free Fire</div>
+    <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" id="hpField" />
+    <div class="field">
+      <label for="uidInput">UID Free Fire</label>
+      <input type="number" id="uidInput" placeholder="Contoh: 123456789" oninput="onUIDInput(this.value)" />
+      <div class="err-msg" id="uidErr">Masukkan UID Free Fire kamu!</div>
+      <!-- UID PREVIEW -->
+      <div id="uidPreview" class="uid-preview" style="display:none;">
+        <div class="uid-avatar-ph" id="uidAvatarPh"><i class="fa-solid fa-user"></i></div>
+        <img id="uidAvatarImg" class="uid-avatar" src="" alt="" style="display:none;" />
+        <div>
+          <div style="font-size:14px;font-weight:800;color:var(--text);" id="uidPreviewName">Mencari...</div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);margin-top:2px;" id="uidPreviewSub">Masukkan UID Free Fire kamu</div>
+        </div>
+      </div>
+    </div>
+    <!-- REFERRAL INPUT -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;"><i class="fa-solid fa-ticket ic-indigo"></i> Kode Referral (opsional)</div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="refInput" placeholder="Masukkan kode referral..." maxlength="10" oninput="this.value=this.value.toUpperCase();validateRef(this.value)"
+          style="flex:1;padding:10px 12px;border:2px solid var(--border);border-radius:10px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;background:var(--bg);color:var(--text);outline:none;" />
+        <div id="refStatus" style="display:flex;align-items:center;font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap;"></div>
+      </div>
+    </div>
+    <button class="btn btn-green" id="s1Btn" onclick="step1Next()"><i class="fa-solid fa-rocket" style="color:#ffeb3b;"></i> Klaim Diamond Sekarang</button>
+  </div>
+
+  <!-- SUDAH KLAIM -->
+  <div id="sRequest" class="card hidden">
+    <div class="c-title"><i class="fa-solid fa-triangle-exclamation ic-amber"></i> Sudah Pernah Klaim</div>
+    <div class="c-sub">UID ini sudah pernah klaim Diamond sebelumnya</div>
+    <div class="alert a-warn"><span><i class="fa-regular fa-hourglass ic-amber"></i></span><span>Untuk klaim ulang, kamu perlu <strong>izin dari admin</strong>.</span></div>
+    <div class="field">
+      <label>Alasan Klaim Ulang</label>
+      <textarea id="alasanInput" placeholder="Contoh: Saya belum menerima Diamond..."></textarea>
+    </div>
+    <button class="btn btn-orange" onclick="kirimPermintaan()"><i class="fa-solid fa-paper-plane ic-indigo"></i> Kirim Permintaan</button>
+    <button class="btn btn-ghost" onclick="back1()">← Kembali</button>
+  </div>
+  <div id="sRequestDone" class="card hidden">
+    <div style="text-align:center;padding:10px 0;">
+      <div style="font-size:52px;margin-bottom:10px;">📨</div>
+      <div class="c-title" style="justify-content:center;">Permintaan Terkirim!</div>
+      <div class="c-sub" style="text-align:center;">Admin akan memproses dalam 1-3 hari kerja</div>
+    </div>
+    <div class="alert a-ok"><span><i class="fa-solid fa-circle-check ic-green"></i></span><span>Cek statusnya di kolom "Cek Status" di bawah.</span></div>
+    <button class="btn btn-ghost" onclick="resetAll()">← Mulai Ulang</button>
+  </div>
+
+  <!-- RATE LIMIT -->
+  <div id="sRateLimit" class="rl-card hidden">
+    <div class="c-title"><i class="fa-solid fa-shield-halved ic-red"></i> Terlalu Banyak Percobaan</div>
+    <div class="c-sub">Kamu sudah mencoba terlalu banyak. Coba lagi nanti.</div>
+    <div id="rlBtnWrap">
+      <button class="btn btn-orange" onclick="tampilFormRL()"><i class="fa-solid fa-rotate-right"></i> Request Reset Limit</button>
+    </div>
+    <div id="rlFormWrap" style="display:none;">
+      <div class="field" style="margin-top:12px;">
+        <label>Alasan</label>
+        <textarea id="rlAlasanInput" placeholder="Jelaskan kenapa kamu butuh reset limit..."></textarea>
+      </div>
+      <button class="btn btn-orange" onclick="kirimRL()"><i class="fa-solid fa-paper-plane ic-indigo"></i> Kirim Request</button>
+      <button class="btn btn-ghost" onclick="sembunyiFormRL()">Batal</button>
+    </div>
+  </div>
+  <div id="sRateLimitDone" class="card hidden">
+    <div style="text-align:center;padding:10px 0 6px;font-size:48px;">⏳</div>
+    <div class="c-title" style="justify-content:center;">Request Terkirim</div>
+    <div class="c-sub" style="text-align:center;">Tunggu admin reset limit kamu</div>
+    <button class="btn btn-ghost" onclick="resetAll()">← Kembali</button>
+  </div>
+
+  <!-- STEP 2 — KUIS -->
+  <div id="s2" class="card hidden">
+    <div class="steps">
+      <div class="step-dot done" id="dot1b">✓</div>
+      <div class="step-line done" id="line1b"></div>
+      <div class="step-dot active" id="dot2b">2</div>
+      <div class="step-line" id="line2b"></div>
+      <div class="step-dot" id="dot3b">3</div>
+    </div>
+    <div class="c-title"><i class="fa-solid fa-circle-question ic-blue"></i> Kuis Free Fire</div>
+    <div class="c-sub">Jawab semua soal untuk lanjut</div>
+    <div class="kuis-wrap" id="kuisWrap"></div>
+    <button class="btn btn-ghost" onclick="back1()" style="margin-top:6px;">← Kembali</button>
+  </div>
+
+  <!-- STEP 3 — SUCCESS NORMAL -->
+  <div id="s3" class="card hidden">
+    <div class="win-wrap">
+      <div class="confetti-row">🎊💎🎊💎🎊</div>
+      <div class="trophy"><i class="fa-solid fa-gem ic-cyan"></i></div>
+      <div class="confetti-row">💎🎉💎🎉💎</div>
+    </div>
+    <h2 style="text-align:center;font-size:1.6rem;font-weight:900;margin:10px 0 4px;">Selamat! 🎉</h2>
+    <p style="text-align:center;color:var(--muted);font-size:13px;margin-bottom:16px;font-weight:700;">Diamond kamu berhasil diklaim!</p>
+    <div class="avatar-card">
+      <img id="winAvatar" src="" alt="" onerror="this.style.display='none'" />
+      <div><div class="u-name" id="winUser">—</div><div class="u-sub"><i class="fa-solid fa-circle-check ic-green"></i> Berhasil Klaim Diamond</div></div>
+    </div>
+    <div class="win-amount">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:800;text-transform:uppercase;letter-spacing:1px;">Diamond Sedang Dikirim</div>
+      <div class="win-diamond"><i class="fa-solid fa-gem ic-cyan"></i> <span id="winDiamondNum">100</span></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:5px;font-weight:700;">Masuk dalam 7-10 hari kerja</div>
+    </div>
+    <div class="alert a-ok"><span><i class="fa-solid fa-lightbulb ic-yellow"></i></span><span>Diamond akan dikirim langsung ke akun Free Fire kamu!</span></div>
+    <!-- REFERRAL BOX -->
+    <div class="ref-box" id="s3RefBox" style="display:none;">
+      <div style="font-size:11px;font-weight:900;color:var(--primary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;"><i class="fa-solid fa-ticket"></i> Kode Referral Kamu</div>
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;">Bagikan ke teman — tiap yang pakai kodeму, poin referral kamu bertambah!</div>
+      <div class="ref-code" id="s3RefCode" onclick="copyRefCode()" title="Klik untuk salin">——</div>
+      <div style="text-align:center;font-size:11px;color:var(--muted);font-weight:700;"><i class="fa-solid fa-copy ic-blue"></i> Klik untuk salin</div>
+      <div class="ref-stats">
+        <div class="ref-stat"><div class="ref-stat-num" id="s3RefTotal">0</div><div class="ref-stat-lbl">Referral</div></div>
+        <div class="ref-stat"><div class="ref-stat-num" id="s3RefPoin">0</div><div class="ref-stat-lbl">Poin</div></div>
+      </div>
+    </div>
+    <button class="btn btn-wa" onclick="shareWA()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Share ke WhatsApp
+    </button>
+    <button class="btn btn-ghost" onclick="resetAll()"><i class="fa-solid fa-rotate ic-slate"></i> Mulai Ulang</button>
+  </div>
+
+  <!-- STEP 3 — SUCCESS EVENT -->
+  <div id="sEventWin" class="card hidden">
+    <div class="win-wrap">
+      <div class="confetti-row">🎊⚡🎊⚡🎊</div>
+      <div class="trophy">⚡</div>
+      <div class="confetti-row">⚡🎊⚡🎊⚡</div>
+    </div>
+    <h2 style="text-align:center;font-size:1.5rem;font-weight:900;margin:10px 0 4px;">Event Klaim Berhasil!</h2>
+    <div class="avatar-card" style="margin-top:14px;">
+      <img id="eventWinAvatar" src="" alt="" onerror="this.style.display='none'" />
+      <div><div class="u-name" id="eventWinUser">—</div><div class="u-sub" id="eventWinSub"><i class="fa-solid fa-circle-check ic-green"></i> Dapat Diamond Event</div></div>
+    </div>
+    <div style="background:linear-gradient(135deg,#ff4757,#ff6b35);border-radius:18px;padding:20px;margin:12px 0;text-align:center;color:white;">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;opacity:.85;margin-bottom:4px;">Diamond Event</div>
+      <div style="font-size:3rem;font-weight:900;letter-spacing:-2px;" id="eventWinDiamond">?</div>
+      <div style="font-size:12px;opacity:.8;margin-top:4px;">💎 Masuk dalam 7-10 hari kerja</div>
+    </div>
+    <button class="btn btn-ghost" onclick="resetAll()"><i class="fa-solid fa-rotate ic-slate"></i> Mulai Ulang</button>
+  </div>
+
+</div><!-- /main -->
+
+<footer>
+  <p>Dibuat untuk komunitas <strong>Free Fire Indonesia</strong> 💎</p>
+  <p style="margin-top:4px;"><a href="https://ff.garena.com" target="_blank">ff.garena.com</a></p>
+</footer>
+
+<script>
+  // ===== DIALOG =====
+  function _ixAlert(icon, title, msg) {
+    return new Promise(resolve => {
+      const ov = document.getElementById('ixDialogOverlay');
+      ov.style.display = 'flex'; requestAnimationFrame(()=>ov.classList.add('show'));
+      document.getElementById('ixDialogIcon').textContent = icon;
+      document.getElementById('ixDialogTitle').textContent = title;
+      document.getElementById('ixDialogMsg').textContent = msg;
+      const btn = document.getElementById('ixDialogOk');
+      btn.onclick = () => { ov.classList.remove('show'); setTimeout(()=>{ov.style.display='none';},200); btn.onclick=null; resolve(); };
+    });
+  }
+
+  // ===== STATE =====
+  let state = { uid:'', username:'', avatar:'', eventMode:false, eventDiamond:0 };
+  let _soalKuis = [], _soalIndex = 0, _soalBenar = 0;
+  let _uidFetchTimer = null, _uidCache = {};
+  let _refValidTimer = null, _refValid = null;
+  let _eventCountdownTimer = null;
+
+  const CARDS = ['s1','s2','s3','sRequest','sRequestDone','sRateLimit','sRateLimitDone','sEventWin'];
+  const CARD_ORDER = { s1:0, sRequest:1, sRequestDone:2, sRateLimit:1, sRateLimitDone:2, s2:1, s3:2, sEventWin:2 };
+  const FRONT_HIDDEN_FOR = new Set(['s2','s3','sEventWin','sRateLimit','sRateLimitDone']);
+
+  function showLoading(msg) { document.getElementById('loadingMsg').textContent=msg||'Memproses...'; document.getElementById('loadingOverlay').classList.remove('hidden'); }
+  function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+
+  // ===== BANNER ANIM =====
+  function showBannerAnim(el) {
+    if (!el) return;
+    el.classList.remove('hidden','banner-out'); void el.offsetWidth;
+    el.classList.add('banner-in');
+  }
+  function hideBannerAnim(el) {
+    if (!el||el.classList.contains('hidden')) return;
+    el.classList.remove('banner-in'); el.classList.add('banner-out');
+    el.addEventListener('animationend',()=>{ el.classList.add('hidden'); el.classList.remove('banner-out'); },{once:true});
+  }
+
+  // ===== SHOW/HIDE CARD =====
+  function show(id) {
+    const current = CARDS.find(c => !document.getElementById(c).classList.contains('hidden'));
+    const fc = document.getElementById('frontContent');
+    const pev = document.getElementById('pemenangEventSection');
+    if (FRONT_HIDDEN_FOR.has(id)) {
+      fc.classList.add('hidden'); if(pev)pev.style.display='none';
+    } else {
+      fc.classList.remove('hidden'); if(pev)pev.style.display='';
+    }
+    if (!current||current===id) { showCard(id,'enter-right'); return; }
+    const dir = (CARD_ORDER[id]??1) >= (CARD_ORDER[current]??0) ? 'forward' : 'back';
+    const exitCls = dir==='forward'?'exit-left':'exit-right';
+    const enterCls = dir==='forward'?'enter-right':'enter-left';
+    const el = document.getElementById(current);
+    el.classList.add(exitCls);
+    setTimeout(() => { el.classList.add('hidden'); el.classList.remove(exitCls); showCard(id,enterCls); }, 230);
+  }
+  function showCard(id, enterCls) {
+    CARDS.forEach(c => { if(c!==id) document.getElementById(c).classList.add('hidden'); });
+    const el = document.getElementById(id);
+    el.classList.remove('hidden','enter-right','enter-left','exit-left','exit-right');
+    void el.offsetWidth;
+    el.classList.add(enterCls||'enter-right');
+  }
+
+  function back1() { show('s1'); }
+  function resetAll() {
+    state = { uid:'', username:'', avatar:'', eventMode:false, eventDiamond:0 };
+    document.getElementById('uidInput').value='';
+    document.getElementById('uidPreview').style.display='none';
+    document.getElementById('alasanInput').value='';
+    document.getElementById('s3RefBox').style.display='none';
+    show('s1');
+  }
+
+  // ===== LOADING SCREEN =====
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      const ls = document.getElementById('loadingScreen');
+      ls.classList.add('fade-out');
+      setTimeout(() => ls.style.display='none', 500);
+    }, 1800);
+  });
+
+  // ===== UID PREVIEW =====
+  function onUIDInput(val) {
+    const wrap = document.getElementById('uidPreview');
+    if (!val || val.length < 5) { wrap.style.display='none'; return; }
+    wrap.style.display='flex'; wrap.className='uid-preview';
+    document.getElementById('uidPreviewName').textContent='Mencari...';
+    document.getElementById('uidPreviewSub').textContent='Mengambil data akun';
+    document.getElementById('uidAvatarImg').style.display='none';
+    document.getElementById('uidAvatarPh').style.display='flex';
+    clearTimeout(_uidFetchTimer);
+    _uidFetchTimer = setTimeout(()=>fetchUIDPreview(val), 800);
+  }
+
+  async function fetchUIDPreview(uid) {
+    if (_uidCache[uid]) { renderUIDPreview(uid, _uidCache[uid]); return; }
+    const result = await (window._fetchUID ? window._fetchUID(uid) : {ok:false});
+    if (result.ok) {
+      _uidCache[uid] = result;
+      renderUIDPreview(uid, result);
+    } else {
+      const wrap = document.getElementById('uidPreview');
+      wrap.className = 'uid-preview notfound';
+      document.getElementById('uidPreviewName').textContent = uid;
+      document.getElementById('uidPreviewSub').innerHTML = '<i class="fa-solid fa-circle-xmark" style="color:#ef4444"></i> UID tidak ditemukan / verifikasi gagal — klaim akan ditolak';
+    }
+  }
+
+  function renderUIDPreview(uid, result) {
+    const wrap = document.getElementById('uidPreview');
+    wrap.className = 'uid-preview found';
+    document.getElementById('uidPreviewName').textContent = result.username || uid;
+    document.getElementById('uidPreviewSub').innerHTML = '<i class="fa-solid fa-circle-check" style="color:#00c853"></i> Akun ditemukan!';
+    if (result.avatar) {
+      const img = document.getElementById('uidAvatarImg');
+      img.src = result.avatar; img.style.display='block'; img.className='uid-avatar';
+      img.onload = ()=>img.classList.add('popped');
+      document.getElementById('uidAvatarPh').style.display='none';
+    }
+  }
+
+  // ===== REFERRAL VALIDATE =====
+  function validateRef(val) {
+    const statusEl = document.getElementById('refStatus');
+    _refValid = null; clearTimeout(_refValidTimer);
+    if (!val||val.length<5) { statusEl.innerHTML=''; return; }
+    statusEl.innerHTML='<i class="fa-solid fa-spinner fa-spin" style="color:var(--muted)"></i>';
+    _refValidTimer = setTimeout(async()=>{
+      const ref = await window._cekKodeRef(val);
+      if (ref) { _refValid=ref; statusEl.innerHTML=`<span style="color:#00c853"><i class="fa-solid fa-circle-check"></i> ${ref.username}</span>`; }
+      else { _refValid=null; statusEl.innerHTML=`<span style="color:#ef4444"><i class="fa-solid fa-circle-xmark"></i> Tidak valid</span>`; }
+    }, 700);
+  }
+
+  // ===== RATE LIMIT =====
+  function cekRateLimit() {
+    const max = window._maxPercobaan || 3;
+    const now = Date.now(); const hour = 3600000;
+    let arr = JSON.parse(localStorage.getItem('ff_submits')||'[]');
+    arr = arr.filter(t => now - t < hour);
+    localStorage.setItem('ff_submits', JSON.stringify(arr));
+    return arr.length >= max;
+  }
+  function tambahRateLimit() {
+    let arr = JSON.parse(localStorage.getItem('ff_submits')||'[]');
+    arr.push(Date.now());
+    localStorage.setItem('ff_submits', JSON.stringify(arr));
+  }
+
+  // ===== STEP 1 =====
+  async function step1Next() {
+    if (window._maintenanceAktif) { await _ixAlert('🔧','Kesalahan Teknis','Klaim sedang tidak tersedia. Lihat banner merah di atas.'); return; }
+    if (document.getElementById('hpField').value !== '') return;
+    const uid = document.getElementById('uidInput').value.trim();
+    if (!uid) { document.getElementById('uidInput').classList.add('err'); document.getElementById('uidErr').classList.add('show'); setTimeout(()=>document.getElementById('uidInput').classList.remove('err'),400); return; }
+    document.getElementById('uidErr').classList.remove('show');
+
+    // Blacklist
+    if (window._cekBlacklist) {
+      const alasan = await window._cekBlacklist(uid);
+      if (alasan !== null) {
+        await _ixAlert('🚫','Akses Ditolak', alasan ? `UID kamu terkena pembatasan akses.\nAlasan: ${alasan}` : 'UID kamu terkena pembatasan akses. Hubungi admin.');
+        return;
+      }
+    }
+    // Reset limit
+    if (window._cekResetLimit) await window._cekResetLimit(uid);
+    // Rate limit
+    if (cekRateLimit()) { show('sRateLimit'); return; }
+    tambahRateLimit();
+
+    // Cek sudah klaim
+    showLoading('Mengecek UID...');
+    const cek = await (window._cekUID ? window._cekUID(uid) : { status:'new' });
+    if (cek.status === 'exists') { hideLoading(); show('sRequest'); return; }
+
+    // Fetch username — gagal = lanjut pakai UID
+    showLoading('Memverifikasi UID...');
+    const result = await (window._fetchUID ? window._fetchUID(uid) : {ok:false});
+    hideLoading();
+
+    if (!result.ok) {
+      await _ixAlert(
+        '⚠️',
+        'Verifikasi Gagal',
+        'Server verifikasi tidak dapat dihubungi saat ini.
+Klaim tetap dilanjutkan, username akan menggunakan UID kamu.'
+      );
+    }
+
+    state.uid = uid;
+    state.username = result.ok ? result.username : `UID ${uid}`;
+    state.avatar = result.ok && result.avatar ? result.avatar : '';
+
+    // Load kuis
+    showLoading('Memuat kuis...');
+    const soal = await (window._loadKuis ? window._loadKuis() : null);
+    hideLoading();
+
+    if (!soal || soal.length === 0) {
+      await _ixAlert('⚠️','Kuis Belum Ada','Admin belum membuat soal kuis. Coba lagi nanti!');
+      return;
+    }
+    _soalKuis = soal;
+    _soalIndex = 0;
+    _soalBenar = 0;
+    renderKuis();
+    show('s2');
+  }
+
+  // ===== KUIS =====
+  function renderKuis() {
+    const wrap = document.getElementById('kuisWrap');
+    const soal = _soalKuis[_soalIndex];
+    const total = _soalKuis.length;
+    const pct = Math.round((_soalIndex / total) * 100);
+    wrap.innerHTML = `
+      <div class="kuis-progress"><span>Soal ${_soalIndex+1} dari ${total}</span><span>${_soalBenar} benar</span></div>
+      <div class="kuis-bar-bg"><div class="kuis-bar" id="kuisBar" style="width:${pct}%"></div></div>
+      <div class="kuis-soal">${soal.pertanyaan}</div>
+      <div class="kuis-options" id="kuisOptions">
+        ${soal.pilihan.map((p,i)=>`<button class="kuis-opt" onclick="jawabKuis(${i})">${p}</button>`).join('')}
+      </div>
+      <div class="kuis-feedback" id="kuisFeedback"></div>
+    `;
+  }
+
+  async function jawabKuis(idx) {
+    const soal = _soalKuis[_soalIndex];
+    const opts = document.querySelectorAll('.kuis-opt');
+    opts.forEach(o => o.disabled = true);
+    const fb = document.getElementById('kuisFeedback');
+    if (idx === soal.jawaban) {
+      opts[idx].classList.add('correct');
+      fb.className = 'kuis-feedback show ok';
+      fb.innerHTML = '<i class="fa-solid fa-circle-check"></i> Benar! 🎉';
+      _soalBenar++;
+      await delay(900);
+      _soalIndex++;
+      if (_soalIndex >= _soalKuis.length) {
+        await selesaiKuis();
+      } else {
+        renderKuis();
+      }
+    } else {
+      opts[idx].classList.add('wrong');
+      opts[soal.jawaban].classList.add('reveal-correct');
+      fb.className = 'kuis-feedback show fail';
+      fb.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Salah! Jawaban benar: <strong>${soal.pilihan[soal.jawaban]}</strong><br><span style="font-size:11px;">Kamu akan kembali ke awal soal...</span>`;
+      await delay(2200);
+      // Reset kuis dari awal
+      _soalIndex = 0; _soalBenar = 0;
+      renderKuis();
+    }
+  }
+
+  function delay(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+  async function selesaiKuis() {
+    showLoading('Menyimpan klaim...');
+    const refKode = document.getElementById('refInput')?.value?.trim() || '';
+    const diamond = window._diamondJumlah || 100;
+    await (window._saveKlaim ? window._saveKlaim(state.uid, state.username, state.avatar, diamond, refKode&&_refValid?refKode:'') : null);
+    document.getElementById('winUser').textContent = state.username;
+    document.getElementById('winAvatar').src = state.avatar;
+    document.getElementById('winDiamondNum').textContent = diamond;
+    hideLoading();
+    show('s3');
+    tembakConfettiFF(diamond, false);
+    showRefOnSuccess();
+  }
+
+  // ===== EVENT KLAIM =====
+  async function klaimEvent() {
+    if (window._maintenanceAktif) { await _ixAlert('🔧','Kesalahan Teknis','Klaim sedang tidak tersedia.'); return; }
+    const uid = document.getElementById('uidInput').value.trim();
+    if (!uid) { await _ixAlert('⚠️','UID Kosong','Masukkan UID Free Fire kamu terlebih dahulu di form di bawah!'); return; }
+    if (window._cekBlacklist) {
+      const bl = await window._cekBlacklist(uid);
+      if (bl !== null) { await _ixAlert('🚫','Akses Ditolak','UID kamu terkena pembatasan akses.'); return; }
+    }
+    showLoading('Memproses klaim event...');
+    const result = await (window._klaimEvent ? window._klaimEvent(uid, uid, '') : {ok:false,msg:'Fitur belum siap'});
+    hideLoading();
+    if (!result.ok) { await _ixAlert('❌','Gagal',result.msg); return; }
+    state.uid = uid;
+    document.getElementById('eventWinUser').textContent = uid;
+    document.getElementById('eventWinDiamond').textContent = result.diamond;
+    show('sEventWin');
+    tembakConfettiFF(result.diamond, true);
+  }
+
+  function showEvent(data) {
+    const banner = document.getElementById('eventBanner');
+    document.getElementById('eventDiamond').textContent = data.diamond||'?';
+    document.getElementById('eventSisa').textContent = Math.max(0, data.maxPeserta-(data.pesertaCount||0));
+    document.getElementById('eventMax').textContent = data.maxPeserta;
+    const pct = Math.min(100, Math.round(((data.pesertaCount||0)/data.maxPeserta)*100));
+    document.getElementById('eventProgressBar').style.width = pct+'%';
+    if (data.deadline) {
+      const dl = data.deadline.toDate?data.deadline.toDate():new Date(data.deadline);
+      if (_eventCountdownTimer) clearInterval(_eventCountdownTimer);
+      function tick() {
+        const sisa = Math.max(0,dl-new Date());
+        const j=Math.floor(sisa/3600000),m=Math.floor((sisa%3600000)/60000),s=Math.floor((sisa%60000)/1000);
+        document.getElementById('eventCountdown').textContent=`${j>0?j+'j ':''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        if(sisa<=0){clearInterval(_eventCountdownTimer);hideEvent();}
+      }
+      tick(); _eventCountdownTimer=setInterval(tick,1000);
+      document.getElementById('eventCountdownWrap').classList.remove('hidden');
+    } else { document.getElementById('eventCountdownWrap').classList.add('hidden'); }
+    banner.classList.remove('hidden');
+  }
+  function hideEvent() {
+    document.getElementById('eventBanner').classList.add('hidden');
+    if(_eventCountdownTimer){clearInterval(_eventCountdownTimer);_eventCountdownTimer=null;}
+  }
+
+  // ===== PERMINTAAN =====
+  async function kirimPermintaan() {
+    const alasan = document.getElementById('alasanInput').value.trim();
+    if (!alasan) { await _ixAlert('✍️','Alasan Kosong','Tulis alasan klaim ulang kamu!'); return; }
+    showLoading('Mengirim...');
+    const ok = await (window._kirimPermintaan ? window._kirimPermintaan(state.uid, state.username, alasan) : false);
+    hideLoading();
+    if (ok) show('sRequestDone'); else await _ixAlert('❌','Gagal','Gagal mengirim permintaan. Coba lagi!');
+  }
+
+  // ===== RATE LIMIT =====
+  function tampilFormRL() { document.getElementById('rlBtnWrap').style.display='none'; document.getElementById('rlFormWrap').style.display='block'; }
+  function sembunyiFormRL() { document.getElementById('rlFormWrap').style.display='none'; document.getElementById('rlBtnWrap').style.display='block'; }
+  async function kirimRL() {
+    const alasan = document.getElementById('rlAlasanInput').value.trim();
+    showLoading('Mengirim...');
+    const r = await (window._kirimPermintaanRL ? window._kirimPermintaanRL(state.uid||'?', alasan) : {ok:false});
+    hideLoading();
+    if (r.ok) show('sRateLimitDone'); else await _ixAlert('❌','Gagal',r.msg||'Coba lagi!');
+  }
+
+  // ===== KIRIM PESAN =====
+  async function kirimPesan() {
+    const uid = document.getElementById('pesanUID').value.trim();
+    const pesan = document.getElementById('pesanIsi').value.trim();
+    const st = document.getElementById('pesanStatus');
+    if (!pesan||pesan.length<5) { st.textContent='⚠️ Tulis pesan minimal 5 karakter!'; st.style.color='#ef4444'; return; }
+    try {
+      await (window._kirimPesan ? window._kirimPesan(uid, pesan) : null);
+      document.getElementById('pesanUID').value=''; document.getElementById('pesanIsi').value='';
+      st.textContent='✅ Pesan terkirim!'; st.style.color='#00c853';
+      setTimeout(()=>st.textContent='',3000);
+    } catch(e) { st.textContent='❌ Gagal!'; st.style.color='#ef4444'; }
+  }
+
+  // ===== REFERRAL =====
+  async function showRefOnSuccess() {
+    if (!window._getOrCreateReferral||!state.uid) return;
+    try {
+      const data = await window._getOrCreateReferral(state.uid, state.username);
+      if (!data) return;
+      document.getElementById('s3RefCode').textContent = data.code;
+      document.getElementById('s3RefTotal').textContent = data.total||0;
+      document.getElementById('s3RefPoin').textContent = data.poin||0;
+      document.getElementById('s3RefBox').style.display='block';
+    } catch(e){}
+  }
+  function copyRefCode() {
+    const code = document.getElementById('s3RefCode').textContent;
+    const url = window.location.origin+window.location.pathname+'?ref='+code;
+    navigator.clipboard.writeText(url).then(()=>{
+      const el=document.getElementById('s3RefCode'); const orig=el.textContent;
+      el.textContent='✅ Tersalin!'; setTimeout(()=>el.textContent=orig,1500);
+    });
+  }
+
+  // ===== SHARE WA =====
+  function shareWA() {
+    const text = `💎 Aku baru dapat Diamond GRATIS di Free Fire!\nKamu juga bisa klaim:\n${window.location.href}\n\nBuruan sebelum habis!`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,'_blank');
+  }
+
+  // ===== CONFETTI =====
+  function tembakConfettiFF(diamond, isEvent) {
+    let colors, particleCount, scalar;
+    if (diamond >= 500) {
+      colors = ['#ffd700','#8e44ad','#c0392b','#f39c12','#ffffff'];
+      particleCount=200; scalar=1.4;
+    } else if (diamond >= 200) {
+      colors = ['#ffd700','#ff9f43','#ff6b35','#ffffff','#00c853'];
+      particleCount=150; scalar=1.2;
+    } else if (isEvent) {
+      colors = ['#ff4757','#ff6b35','#ffeb3b','#ff9f43','#ffffff'];
+      particleCount=130; scalar=1.1;
+    } else {
+      colors = ['#00c853','#00e676','#00bcd4','#ffffff','#ffeb3b'];
+      particleCount=100; scalar=1.0;
+    }
+    const end = Date.now() + (diamond>=200?3500:2500);
+    (function frame(){
+      confetti({particleCount:Math.ceil(particleCount/20),angle:60,spread:55,origin:{x:0},colors,scalar});
+      confetti({particleCount:Math.ceil(particleCount/20),angle:120,spread:55,origin:{x:1},colors,scalar});
+      if(Date.now()<end) requestAnimationFrame(frame);
+    })();
+    confetti({particleCount,spread:100,origin:{y:.6},colors,startVelocity:45,scalar});
+    if(diamond>=200) setTimeout(()=>confetti({particleCount:Math.round(particleCount*.7),spread:130,origin:{y:.4},colors,startVelocity:55,scalar:scalar*1.1}),500);
+  }
+
+  // ===== RIPPLE =====
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn');
+    if (!btn) return;
+    const circle = document.createElement('span');
+    circle.classList.add('ripple');
+    const rect = btn.getBoundingClientRect();
+    const size = Math.max(rect.width,rect.height);
+    circle.style.width=circle.style.height=size+'px';
+    circle.style.left=(e.clientX-rect.left-size/2)+'px';
+    circle.style.top=(e.clientY-rect.top-size/2)+'px';
+    btn.appendChild(circle);
+    circle.addEventListener('animationend',()=>circle.remove());
+  });
+</script>
+</body>
+</html>
