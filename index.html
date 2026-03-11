@@ -264,8 +264,8 @@
   // ===== EVENT =====
   window._listenEvent = function() {
     onSnapshot(doc(db,"config","event_ff"), (snap) => {
-      if (!snap.exists()||!snap.data().active) { hideEvent(); return; }
-      showEvent(snap.data());
+      if (!snap.exists()||!snap.data().active) { window._hideEvent&&window._hideEvent(); return; }
+      window._showEvent&&window._showEvent(snap.data());
     });
   };
   window._klaimEvent = async function(uid, username, avatar) {
@@ -321,8 +321,8 @@
         const warna = { info:'#3b82f6', peringatan:'#f59e0b', darurat:'#ef4444' };
         el.style.background = warna[snap.data().kategori]||'#3b82f6';
         document.getElementById('broadcastPesan').textContent = snap.data().pesan;
-        showBannerAnim(el);
-      } else { hideBannerAnim(el); }
+        window._showBannerAnim&&window._showBannerAnim(el);
+      } else { window._hideBannerAnim&&window._hideBannerAnim(el); }
     });
     // Pengumuman
     onSnapshot(doc(db,"config","pengumuman_ff"), (snap) => {
@@ -330,8 +330,8 @@
       if (!el) return;
       if (snap.exists()&&snap.data().aktif&&snap.data().pesan) {
         document.getElementById('pengumumanText').textContent = snap.data().pesan;
-        showBannerAnim(el);
-      } else { hideBannerAnim(el); }
+        window._showBannerAnim&&window._showBannerAnim(el);
+      } else { window._hideBannerAnim&&window._hideBannerAnim(el); }
     });
     // Maintenance
     onSnapshot(doc(db,"config","maintenance_ff"), (snap) => {
@@ -570,6 +570,7 @@
   <img src="ff-logo.png" class="ls-logo" alt="FF" onerror="this.style.background='linear-gradient(135deg,#00c853,#00e676)';this.style.padding='14px'" />
   <div class="ls-title">💎 Diamond Gratis FF</div>
   <div class="ls-dots"><div class="ls-dot"></div><div class="ls-dot"></div><div class="ls-dot"></div></div>
+  <button onclick="document.getElementById('loadingScreen').style.display='none'" style="margin-top:16px;padding:8px 20px;background:transparent;border:1.5px solid #00c853;border-radius:50px;color:#00c853;font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;cursor:pointer;">⏩ Skip</button>
 </div>
 
 <!-- LOADING OVERLAY -->
@@ -902,6 +903,8 @@
     el.classList.remove('banner-in'); el.classList.add('banner-out');
     el.addEventListener('animationend',()=>{ el.classList.add('hidden'); el.classList.remove('banner-out'); },{once:true});
   }
+  window._showBannerAnim = showBannerAnim;
+  window._hideBannerAnim = hideBannerAnim;
 
   // ===== SHOW/HIDE CARD =====
   function show(id) {
@@ -1159,6 +1162,8 @@ Klaim tetap dilanjutkan, username akan menggunakan UID kamu.'
     tembakConfettiFF(result.diamond, true);
   }
 
+  window._showEvent = function(data) { showEvent(data); };
+  window._hideEvent = function() { hideEvent(); };
   function showEvent(data) {
     const banner = document.getElementById('eventBanner');
     document.getElementById('eventDiamond').textContent = data.diamond||'?';
