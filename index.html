@@ -1291,9 +1291,9 @@ Klaim tetap dilanjutkan, username akan menggunakan UID kamu.'
 
 <!-- ===== DEBUG PANEL ===== -->
 <style>
-  #debugBtn { position:fixed;bottom:20px;left:20px;width:44px;height:44px;border-radius:50%;background:#1a2e1f;color:#00e676;border:2px solid #00c853;font-size:18px;cursor:pointer;z-index:8000;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:.7; }
+  #debugBtn { position:fixed;bottom:20px;left:20px;width:44px;height:44px;border-radius:50%;background:#1a2e1f;color:#00e676;border:2px solid #00c853;font-size:18px;cursor:pointer;z-index:10000;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:.85; }
   #debugBtn:active { transform:scale(.92); }
-  #debugPanel { position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:8001;display:none;flex-direction:column; }
+  #debugPanel { position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:10001;display:none;flex-direction:column; }
   #debugPanel.open { display:flex; }
   #debugHeader { background:#1a2e1f;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #00c853; }
   #debugHeader span { color:#00e676;font-family:'Nunito',sans-serif;font-size:14px;font-weight:900; }
@@ -1318,11 +1318,11 @@ Klaim tetap dilanjutkan, username akan menggunakan UID kamu.'
   </div>
   <div id="debugLog"><div class="d-info">Debug panel siap. Memuat log...</div></div>
   <div id="debugActions">
-    <button onclick="debugClear()">🗑 Clear</button>
+    <button onclick="debugForceHideLoading()" style="background:#00c853;color:#fff;border-color:#00c853;">⏩ Skip Loading</button>
     <button onclick="debugTestFirebase()">🔥 Test Firebase</button>
     <button onclick="debugTestEmailJS()">📧 Test EmailJS</button>
     <button onclick="debugCopyLog()">📋 Copy Log</button>
-    <button onclick="debugForceHideLoading()">⏩ Skip Loading</button>
+    <button onclick="debugClear()">🗑 Clear</button>
   </div>
 </div>
 
