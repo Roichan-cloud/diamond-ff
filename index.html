@@ -943,13 +943,17 @@
   }
 
   // ===== LOADING SCREEN =====
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      const ls = document.getElementById('loadingScreen');
-      ls.classList.add('fade-out');
-      setTimeout(() => ls.style.display='none', 500);
-    }, 1800);
-  });
+  function _hideLoadingScreen() {
+    const ls = document.getElementById('loadingScreen');
+    if (!ls || ls.style.display === 'none') return;
+    ls.classList.add('fade-out');
+    setTimeout(() => ls.style.display='none', 500);
+  }
+  // Auto hide setelah 1.8 detik
+  setTimeout(_hideLoadingScreen, 1800);
+  // Fallback: paksa hide setelah 4 detik
+  setTimeout(_hideLoadingScreen, 4000);
+  window.addEventListener('load', () => setTimeout(_hideLoadingScreen, 1800));
 
   // ===== UID PREVIEW =====
   function onUIDInput(val) {
@@ -1278,6 +1282,22 @@ Klaim tetap dilanjutkan, username akan menggunakan UID kamu.'
     if(diamond>=200) setTimeout(()=>confetti({particleCount:Math.round(particleCount*.7),spread:130,origin:{y:.4},colors,startVelocity:55,scalar:scalar*1.1}),500);
   }
 
+
+  // ===== EXPOSE KE WINDOW (dipanggil dari HTML attribute) =====
+  window.onUIDInput    = onUIDInput;
+  window.validateRef   = validateRef;
+  window.step1Next     = step1Next;
+  window.klaimEvent    = klaimEvent;
+  window.kirimPesan    = kirimPesan;
+  window.kirimPermintaan = kirimPermintaan;
+  window.back1         = back1;
+  window.resetAll      = resetAll;
+  window.tampilFormRL  = tampilFormRL;
+  window.sembunyiFormRL= sembunyiFormRL;
+  window.kirimRL       = kirimRL;
+  window.copyRefCode   = copyRefCode;
+  window.shareWA       = shareWA;
+  window.jawabKuis     = jawabKuis;
   // ===== RIPPLE =====
   document.addEventListener('click', function(e) {
     const btn = e.target.closest('.btn');
