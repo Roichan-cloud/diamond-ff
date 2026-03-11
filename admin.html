@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin — Diamond Gratis FF 💎</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc,
+  query, where, orderBy, limit, serverTimestamp, doc, onSnapshot, increment, getCountFromServer
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDM4ZMnwe0ERm0M5NKG9wfFVNslxoXmlhA",
+  authDomain: "diamond-ff-id.firebaseapp.com",
+  projectId: "diamond-ff-id",
+  storageBucket: "diamond-ff-id.firebasestorage.app",
+  messagingSenderId: "972986074496",
+  appId: "1:972986074496:web:2b16d7a3a1677914302d65"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+window._db = db;
+
+// ===== AUTH =====
+window._login = async (pass) => {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'admin_ff'));
+    const correct = snap.exists() ? snap.data().password : 'admin123';
+    return pass === correct;
+  } catch(e) { return pass === 'admin123'; }
+};
+window._gantiPassword = async (lama, baru) => {
+  const snap = await getDoc(doc(db, 'config', 'admin_ff'));
+  const current = snap.exists() ? snap.data().password : 'admin123';
+  if (lama !== current) return { ok:false, msg:'Password lama salah!' };
+  await setDoc(doc(db, 'config', 'admin_ff'), { password: baru }, { merge:true });
+  return { ok:true };
+};
+
+// ===== LOG =====
+function _addLog(aksi, detail) {
+  addDoc(collection(db, 'log_admin_ff'), { aksi, detail, timestamp: serverTimestamp(), tanggal: new Date().toLocaleString('id-ID') }).catch(()=>{});
+}
+window._addLog = _addLog;
+
+// ===== OVERVIEW =====
+window._loadOverview = async () => {
+  try {
+    const [klaimSnap, permSnap, pesanSnap, rlSnap, blSnap, wlSnap, refSnap] = await Promise.all([
+      getDocs(collection(db,'klaim_ff')),
+      getDocs(query(collection(db,'permintaan_ff'),where('status','==','pending'))),
+      getDocs(query(collection(db,'pesan_ff'),where('dibaca','==',false))),
+      getDocs(query(collection(db,'permintaan_rl_ff'),where('status','==','pending'))),
+      getDocs(collection(db,'blacklist_ff')),
+      getDocs(collection(db,'whitelist_ff')),
+      getDocs(collection(db,'referral_ff')),
+    ]);
+    setOvStat('ovTotalKlaim', klaimSnap.size);
+    setOvStat('ovPending', permSnap.size);
+    setOvStat('ovPesan', pesanSnap.size);
+    setOvStat('ovRL', rlSnap.size);
+    setOvStat('ovBlacklist', blSnap.size);
+    setOvStat('ovWhitelist', wlSnap.size);
+    setOvStat('ovReferral', refSnap.size);
+    // 5 terbaru
+    const recentSnap = await getDocs(query(collection(db,'klaim_ff'),orderBy('timestamp','desc'),limit(5)));
+    const tbody = document.getElementById('ovRecentTbody');
+    if (tbody) {
+      if (recentSnap.empty) { tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--muted);font-weight:700;">Belum ada klaim</td></tr>'; return; }
+      tbody.innerHTML = recentSnap.docs.map(d=>{
+        const v=d.data();
+        return `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:9px 12px;font-weight:800;">${v.uid||'—'}</td>
+          <td style="padding:9px 12px;font-weight:700;">${v.username||'—'}</td>
+          <td style="padding:9px 12px;font-weight:800;color:#00c853;">${v.diamond||'?'} 💎</td>
+          <td style="padding:9px 12px;font-weight:600;color:var(--muted);font-size:12px;">${v.tanggal||'—'}</td>
+        </tr>`;
+      }).join('');
+    }
+  } catch(e) { console.error(e); }
+};
+function setOvStat(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
+
+// ===== DAFTAR KLAIM =====
+window._loadKlaim = () => {
+  const tbody = document.getElementById('klaimTbody');
+  onSnapshot(query(collection(db,'klaim_ff'),orderBy('timestamp','desc')), snap => {
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted);font-weight:700;">Belum ada klaim</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map((d,i)=>{
+      const v=d.data();
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:9px 12px;font-weight:700;color:var(--muted);">${i+1}</td>
+        <td style="padding:9px 12px;font-weight:800;">${v.uid||'—'}</td>
+        <td style="padding:9px 12px;font-weight:700;">${v.username||'—'}</td>
+        <td style="padding:9px 12px;font-weight:800;color:#00c853;">${v.diamond||'?'} 💎</td>
+        <td style="padding:9px 12px;">
+          <button onclick="window._hapusKlaim('${d.id}','${v.uid||''}')" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-trash"></i> Hapus</button>
+        </td>
+      </tr>`;
+    }).join('');
+  });
+};
+window._hapusKlaim = async (id, uid) => {
+  if (!await _confirm(`Hapus klaim UID ${uid}?`)) return;
+  await deleteDoc(doc(db,'klaim_ff',id));
+  _addLog('Hapus Klaim', `UID: ${uid}`);
+};
+window._hapusSemuaKlaim = async () => {
+  if (!await _confirm('Hapus SEMUA data klaim? Tidak bisa dibatalkan!')) return;
+  const snap = await getDocs(collection(db,'klaim_ff'));
+  await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,'klaim_ff',d.id))));
+  _addLog('Hapus Semua Klaim', `${snap.docs.length} data dihapus`);
+};
+
+// ===== PERMINTAAN =====
+window._loadPermintaan = () => {
+  const tbody = document.getElementById('permintaanTbody');
+  const badge = document.getElementById('permBadge');
+  onSnapshot(query(collection(db,'permintaan_ff'),orderBy('timestamp','desc')), snap => {
+    const pending = snap.docs.filter(d=>d.data().status==='pending').length;
+    badge.style.display=pending>0?'flex':'none'; badge.textContent=pending;
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted);font-weight:700;">Belum ada permintaan</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const v=d.data();
+      const statusBadge = v.status==='pending'?`<span style="background:#fff8e6;color:#92400e;border:1px solid #ffd88a;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;">Pending</span>`
+        :v.status==='approved'?`<span style="background:#e8fff2;color:#0a6e3a;border:1px solid #b2f5d0;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;">Approved</span>`
+        :`<span style="background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;">${v.status}</span>`;
+      const aksiBtn = v.status==='pending'?`
+        <button onclick="window._setujuPermintaan('${d.id}','${v.uid||''}','${v.username||''}')" style="${btnStyle('#e8fff2','#00c853','#b2f5d0')}"><i class="fa-solid fa-check"></i></button>
+        <button onclick="window._tolakPermintaan('${d.id}','${v.uid||''}')" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-xmark"></i></button>`:
+        `<button onclick="window._hapusPermintaan('${d.id}')" style="${btnStyle('#f3f4f6','#6b7280','#e5e7eb')}"><i class="fa-solid fa-trash"></i></button>`;
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:9px 12px;font-weight:800;">${v.uid||'—'}</td>
+        <td style="padding:9px 12px;font-weight:700;">${v.username||'—'}</td>
+        <td style="padding:9px 12px;font-size:12px;font-weight:600;color:var(--muted);max-width:180px;">${v.alasan||'—'}</td>
+        <td style="padding:9px 12px;">${statusBadge}</td>
+        <td style="padding:9px 12px;display:flex;gap:5px;">${aksiBtn}</td>
+      </tr>`;
+    }).join('');
+  });
+};
+window._setujuPermintaan = async (id, uid, username) => {
+  const tipe = await _selectTipe();
+  if (!tipe) return;
+  if (tipe==='reset') {
+    const oldSnap = await getDocs(query(collection(db,'klaim_ff'),where('uidLower','==',uid.toLowerCase())));
+    await Promise.all(oldSnap.docs.map(d=>deleteDoc(doc(db,'klaim_ff',d.id))));
+  }
+  await updateDoc(doc(db,'permintaan_ff',id), { status:'approved' });
+  _addLog('Setujui Permintaan', `UID: ${uid} | Tipe: ${tipe}`);
+};
+window._tolakPermintaan = async (id, uid) => {
+  if (!await _confirm(`Tolak permintaan UID ${uid}?`)) return;
+  await updateDoc(doc(db,'permintaan_ff',id), { status:'ditolak' });
+  _addLog('Tolak Permintaan', `UID: ${uid}`);
+};
+window._hapusPermintaan = async (id) => {
+  await deleteDoc(doc(db,'permintaan_ff',id));
+};
+async function _selectTipe() {
+  return new Promise(resolve => {
+    const ov = document.getElementById('tipeDialogOverlay');
+    ov.style.display='flex'; requestAnimationFrame(()=>ov.classList.add('show'));
+    document.getElementById('tipeResetBtn').onclick = ()=>{ closeTP(); resolve('reset'); };
+    document.getElementById('tipeTambahBtn').onclick = ()=>{ closeTP(); resolve('tambah'); };
+    document.getElementById('tipeCancelBtn').onclick = ()=>{ closeTP(); resolve(null); };
+    function closeTP() { ov.classList.remove('show'); setTimeout(()=>ov.style.display='none',200); }
+  });
+}
+
+// ===== EVENT =====
+window._loadEvent = () => {
+  onSnapshot(doc(db,'config','event_ff'), snap => {
+    const aktif = snap.exists()&&snap.data().active;
+    document.getElementById('eventStatusBadge').textContent = aktif?'🟢 Aktif':'🔴 Tidak Aktif';
+    if (snap.exists()&&snap.data().active) {
+      const d=snap.data();
+      document.getElementById('evDiamondInput').value=d.diamond||100;
+      document.getElementById('evMaxInput').value=d.maxPeserta||50;
+      document.getElementById('evIdInput').value=d.eventId||'';
+    }
+  });
+};
+window._aktifkanEvent = async () => {
+  const diamond=parseInt(document.getElementById('evDiamondInput').value)||100;
+  const max=parseInt(document.getElementById('evMaxInput').value)||50;
+  const id=document.getElementById('evIdInput').value.trim()||'EV'+Date.now();
+  const deadlineVal=document.getElementById('evDeadlineInput').value;
+  const data = { active:true, diamond, maxPeserta:max, pesertaCount:0, eventId:id };
+  if (deadlineVal) data.deadline = new Date(deadlineVal);
+  await setDoc(doc(db,'config','event_ff'), data, { merge:true });
+  _addLog('Aktifkan Event', `Diamond: ${diamond} | Max: ${max}`);
+  showAdminToast('✅ Event diaktifkan!');
+};
+window._matikanEvent = async () => {
+  if (!await _confirm('Matikan event sekarang?')) return;
+  await setDoc(doc(db,'config','event_ff'), { active:false }, { merge:true });
+  _addLog('Matikan Event', '—');
+  showAdminToast('✅ Event dimatikan!');
+};
+window._loadEventPeserta = () => {
+  const tbody = document.getElementById('evPesertaTbody');
+  onSnapshot(query(collection(db,'event_klaim_ff'),orderBy('timestamp','desc')), snap => {
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);font-weight:700;">Belum ada peserta event</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map((d,i)=>{
+      const v=d.data();
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:9px 12px;font-weight:700;color:var(--muted);">${i+1}</td>
+        <td style="padding:9px 12px;font-weight:800;">${v.uid||'—'}</td>
+        <td style="padding:9px 12px;font-weight:700;">${v.username||'—'}</td>
+        <td style="padding:9px 12px;font-weight:800;color:#00c853;">${v.diamond||'?'} 💎</td>
+        <td style="padding:9px 12px;"><button onclick="window._hapusEventPeserta('${d.id}')" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`;
+    }).join('');
+  });
+};
+window._hapusEventPeserta = async (id) => {
+  if (!await _confirm('Hapus peserta ini?')) return;
+  await deleteDoc(doc(db,'event_klaim_ff',id));
+  _addLog('Hapus Peserta Event','—');
+};
+window._hapusSemuaEventPeserta = async () => {
+  if (!await _confirm('Hapus semua peserta event?')) return;
+  const snap = await getDocs(collection(db,'event_klaim_ff'));
+  await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,'event_klaim_ff',d.id))));
+  _addLog('Hapus Semua Peserta Event',`${snap.docs.length} dihapus`);
+};
+
+// ===== KUIS =====
+window._loadKuis = async () => {
+  const wrap = document.getElementById('kuisAdminWrap');
+  wrap.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);"><i class="fa-solid fa-spinner fa-spin"></i> Memuat...</div>';
+  try {
+    const snap = await getDoc(doc(db,'config','kuis'));
+    const soal = snap.exists() ? (snap.data().soal||[]) : [];
+    renderKuisAdmin(soal);
+  } catch(e) { wrap.innerHTML='<div style="color:#ef4444;padding:16px;">Gagal memuat kuis.</div>'; }
+};
+let _kuisData = [];
+function renderKuisAdmin(soal) {
+  _kuisData = JSON.parse(JSON.stringify(soal));
+  const wrap = document.getElementById('kuisAdminWrap');
+  if (!soal.length) { wrap.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-weight:700;">Belum ada soal. Klik "Tambah Soal" untuk menambahkan.</div>'; return; }
+  wrap.innerHTML = soal.map((s,i)=>`
+    <div style="background:var(--bg);border:1.5px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:12px;font-weight:900;color:var(--muted);text-transform:uppercase;">Soal ${i+1}</div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="window._editSoal(${i})" style="${btnStyle('#eff6ff','#3b82f6','#bfdbfe')}"><i class="fa-solid fa-pen"></i> Edit</button>
+          <button onclick="window._hapusSoal(${i})" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>
+      <div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:8px;">${s.pertanyaan}</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        ${s.pilihan.map((p,pi)=>`<div style="padding:6px 10px;border-radius:8px;font-size:13px;font-weight:700;background:${pi===s.jawaban?'#e8fff2':'var(--white)'};border:1.5px solid ${pi===s.jawaban?'#b2f5d0':'var(--border)'};color:${pi===s.jawaban?'#0a6e3a':'var(--text)'};">${pi===s.jawaban?'✓ ':''} ${p}</div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+window._tambahSoal = () => { openSoalModal(null, -1); };
+window._editSoal = (idx) => { openSoalModal(_kuisData[idx], idx); };
+function openSoalModal(soal, idx) {
+  document.getElementById('soalModalOverlay').style.display='flex';
+  requestAnimationFrame(()=>document.getElementById('soalModalOverlay').classList.add('show'));
+  document.getElementById('soalModalTitle').textContent = idx===-1?'Tambah Soal':'Edit Soal '+(idx+1);
+  document.getElementById('soalInput').value = soal ? soal.pertanyaan : '';
+  ['A','B','C','D'].forEach((l,i)=>{
+    document.getElementById(`pil${l}`).value = soal&&soal.pilihan[i] ? soal.pilihan[i] : '';
+  });
+  document.getElementById('jawabanSelect').value = soal ? soal.jawaban : 0;
+  document.getElementById('soalSaveBtn').onclick = () => saveSoal(idx);
+}
+function closeSoalModal() {
+  document.getElementById('soalModalOverlay').classList.remove('show');
+  setTimeout(()=>document.getElementById('soalModalOverlay').style.display='none',200);
+}
+async function saveSoal(idx) {
+  const pertanyaan = document.getElementById('soalInput').value.trim();
+  const pilihan = ['A','B','C','D'].map(l=>document.getElementById(`pil${l}`).value.trim());
+  const jawaban = parseInt(document.getElementById('jawabanSelect').value);
+  if (!pertanyaan||pilihan.some(p=>!p)) { showAdminToast('⚠️ Lengkapi semua field!','#ef4444'); return; }
+  if (idx===-1) _kuisData.push({ pertanyaan, pilihan, jawaban });
+  else _kuisData[idx] = { pertanyaan, pilihan, jawaban };
+  await setDoc(doc(db,'config','kuis'), { soal: _kuisData });
+  window._addLog(idx===-1?'Tambah Soal Kuis':'Edit Soal Kuis', `Soal: ${pertanyaan.slice(0,40)}`);
+  showAdminToast('✅ Soal disimpan!');
+  closeSoalModal();
+  renderKuisAdmin(_kuisData);
+}
+window._hapusSoal = async (idx) => {
+  if (!await _confirm(`Hapus soal ${idx+1}?`)) return;
+  _kuisData.splice(idx,1);
+  await setDoc(doc(db,'config','kuis'), { soal: _kuisData });
+  window._addLog('Hapus Soal Kuis',`Index: ${idx}`);
+  renderKuisAdmin(_kuisData);
+  showAdminToast('✅ Soal dihapus!');
+};
+window._hapusSemuaSoal = async () => {
+  if (!await _confirm('Hapus SEMUA soal kuis?')) return;
+  await setDoc(doc(db,'config','kuis'), { soal: [] });
+  window._addLog('Hapus Semua Soal Kuis','—');
+  renderKuisAdmin([]);
+  showAdminToast('✅ Semua soal dihapus!');
+};
+window._closeSoalModal = closeSoalModal;
+
+// ===== RESET LIMIT =====
+window._loadRL = () => {
+  const tbody = document.getElementById('rlTbody');
+  const badge = document.getElementById('rlBadge');
+  onSnapshot(query(collection(db,'permintaan_rl_ff'),orderBy('timestamp','desc')), snap => {
+    const pending=snap.docs.filter(d=>d.data().status==='pending').length;
+    badge.style.display=pending>0?'flex':'none'; badge.textContent=pending;
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);font-weight:700;">Tidak ada request</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const v=d.data();
+      const statusBadge = v.status==='pending'?`<span style="background:#fff8e6;color:#92400e;border:1px solid #ffd88a;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;">Pending</span>`
+        :`<span style="background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;">${v.status}</span>`;
+      const aksi = v.status==='pending'?`
+        <button onclick="window._setujuRL('${d.id}','${v.uid||''}')" style="${btnStyle('#e8fff2','#00c853','#b2f5d0')}"><i class="fa-solid fa-check"></i></button>
+        <button onclick="window._tolakRL('${d.id}','${v.uid||''}')" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-xmark"></i></button>`:
+        `<button onclick="window._hapusRL('${d.id}')" style="${btnStyle('#f3f4f6','#6b7280','#e5e7eb')}"><i class="fa-solid fa-trash"></i></button>`;
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:9px 12px;font-weight:800;">${v.uid||'—'}</td>
+        <td style="padding:9px 12px;font-size:12px;color:var(--muted);font-weight:600;">${v.alasan||'—'}</td>
+        <td style="padding:9px 12px;">${statusBadge}</td>
+        <td style="padding:9px 12px;display:flex;gap:5px;">${aksi}</td>
+      </tr>`;
+    }).join('');
+  });
+};
+window._setujuRL = async (id, uid) => {
+  await updateDoc(doc(db,'permintaan_rl_ff',id),{status:'approved'});
+  await setDoc(doc(db,'config','reset_rl_ff_'+uid.toLowerCase()),{aktif:true},{merge:true});
+  _addLog('Setujui Reset Limit',`UID: ${uid}`);
+  showAdminToast('✅ Reset limit disetujui!');
+};
+window._tolakRL = async (id, uid) => {
+  await updateDoc(doc(db,'permintaan_rl_ff',id),{status:'ditolak'});
+  _addLog('Tolak Reset Limit',`UID: ${uid}`);
+};
+window._hapusRL = async (id) => { await deleteDoc(doc(db,'permintaan_rl_ff',id)); };
+window._hapusSemuaRL = async () => {
+  if (!await _confirm('Hapus semua request reset limit?')) return;
+  const snap=await getDocs(collection(db,'permintaan_rl_ff'));
+  await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,'permintaan_rl_ff',d.id))));
+};
+
+// ===== LOG =====
+window._loadLog = () => {
+  const tbody = document.getElementById('logTbody');
+  onSnapshot(query(collection(db,'log_admin_ff'),orderBy('timestamp','desc'),limit(100)), snap => {
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">Belum ada log</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const v=d.data();
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:9px 12px;font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap;">${v.tanggal||'—'}</td>
+        <td style="padding:9px 12px;font-weight:800;">${v.aksi||'—'}</td>
+        <td style="padding:9px 12px;font-size:12px;color:var(--muted);font-weight:600;">${v.detail||'—'}</td>
+      </tr>`;
+    }).join('');
+  });
+};
+window._hapusSemuaLog = async () => {
+  if (!await _confirm('Hapus semua log?')) return;
+  const snap=await getDocs(collection(db,'log_admin_ff'));
+  await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,'log_admin_ff',d.id))));
+};
+
+// ===== BLACKLIST =====
+window._loadBlacklist = () => {
+  const tbody = document.getElementById('blTbody');
+  onSnapshot(query(collection(db,'blacklist_ff'),orderBy('timestamp','desc')), snap => {
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">Blacklist kosong</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const v=d.data();
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:9px 12px;font-weight:800;">${v.uid||'—'}</td>
+        <td style="padding:9px 12px;font-size:12px;color:var(--muted);font-weight:600;">${v.alasan||'—'}</td>
+        <td style="padding:9px 12px;"><button onclick="window._hapusBlacklist('${d.id}','${v.uid||''}')" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`;
+    }).join('');
+  });
+};
+window._tambahBlacklist = async () => {
+  const uid=document.getElementById('blUidInput').value.trim();
+  const alasan=document.getElementById('blAlasanInput').value.trim();
+  if (!uid) { showAdminToast('⚠️ UID kosong!','#ef4444'); return; }
+  await addDoc(collection(db,'blacklist_ff'),{uid,uidLower:uid.toLowerCase(),alasan:alasan||'-',timestamp:serverTimestamp()});
+  document.getElementById('blUidInput').value=''; document.getElementById('blAlasanInput').value='';
+  _addLog('Tambah Blacklist',`UID: ${uid}`);
+  showAdminToast('✅ UID diblacklist!');
+};
+window._hapusBlacklist = async (id, uid) => {
+  if (!await _confirm(`Hapus blacklist UID ${uid}?`)) return;
+  await deleteDoc(doc(db,'blacklist_ff',id));
+  _addLog('Hapus Blacklist',`UID: ${uid}`);
+};
+window._hapusSemuaBlacklist = async () => {
+  if (!await _confirm('Hapus semua blacklist?')) return;
+  const snap=await getDocs(collection(db,'blacklist_ff'));
+  await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,'blacklist_ff',d.id))));
+  _addLog('Hapus Semua Blacklist','—');
+};
+
+// ===== WHITELIST =====
+window._loadWhitelist = () => {
+  const tbody = document.getElementById('wlTbody');
+  onSnapshot(query(collection(db,'whitelist_ff'),orderBy('timestamp','desc')), snap => {
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="2" style="text-align:center;padding:20px;color:var(--muted);">Whitelist kosong</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const v=d.data();
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:9px 12px;font-weight:800;">${v.uid||'—'}</td>
+        <td style="padding:9px 12px;"><button onclick="window._hapusWhitelist('${d.id}','${v.uid||''}')" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`;
+    }).join('');
+  });
+};
+window._tambahWhitelist = async () => {
+  const uid=document.getElementById('wlUidInput').value.trim();
+  if (!uid) { showAdminToast('⚠️ UID kosong!','#ef4444'); return; }
+  await addDoc(collection(db,'whitelist_ff'),{uid,uidLower:uid.toLowerCase(),timestamp:serverTimestamp()});
+  document.getElementById('wlUidInput').value='';
+  _addLog('Tambah Whitelist',`UID: ${uid}`);
+  showAdminToast('✅ UID ditambah ke whitelist!');
+};
+window._hapusWhitelist = async (id, uid) => {
+  if (!await _confirm(`Hapus whitelist UID ${uid}?`)) return;
+  await deleteDoc(doc(db,'whitelist_ff',id));
+  _addLog('Hapus Whitelist',`UID: ${uid}`);
+};
+window._hapusSemuaWhitelist = async () => {
+  if (!await _confirm('Hapus semua whitelist?')) return;
+  const snap=await getDocs(collection(db,'whitelist_ff'));
+  await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,'whitelist_ff',d.id))));
+  _addLog('Hapus Semua Whitelist','—');
+};
+
+// ===== PESAN =====
+window._loadPesan = () => {
+  const tbody=document.getElementById('pesanTbody');
+  const badge=document.getElementById('pesanBadge');
+  onSnapshot(query(collection(db,'pesan_ff'),orderBy('timestamp','desc')), snap => {
+    const unread=snap.docs.filter(d=>!d.data().dibaca).length;
+    badge.style.display=unread>0?'flex':'none'; badge.textContent=unread;
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">Belum ada pesan</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map(d=>{
+      const v=d.data();
+      return `<tr style="border-bottom:1px solid var(--border);${!v.dibaca?'background:#fffbeb;':''}">
+        <td style="padding:9px 12px;font-weight:800;">${v.uid||'Anonim'}</td>
+        <td style="padding:9px 12px;font-size:13px;font-weight:700;">${v.pesan||'—'}</td>
+        <td style="padding:9px 12px;display:flex;gap:5px;">
+          ${!v.dibaca?`<button onclick="window._tandaiDibaca('${d.id}')" style="${btnStyle('#eff6ff','#3b82f6','#bfdbfe')}"><i class="fa-solid fa-check"></i></button>`:''}
+          <button onclick="window._hapusPesan('${d.id}')" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+  });
+};
+window._tandaiDibaca = async (id) => { await updateDoc(doc(db,'pesan_ff',id),{dibaca:true}); };
+window._hapusPesan = async (id) => { await deleteDoc(doc(db,'pesan_ff',id)); };
+window._hapusSemuaPesan = async () => {
+  if (!await _confirm('Hapus semua pesan?')) return;
+  const snap=await getDocs(collection(db,'pesan_ff'));
+  await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,'pesan_ff',d.id))));
+};
+
+// ===== BROADCAST =====
+window._kirimBroadcast = async () => {
+  const pesan=document.getElementById('broadcastPesan').value.trim();
+  const kat=document.getElementById('broadcastKat').value;
+  if (!pesan) { showAdminToast('⚠️ Pesan kosong!','#ef4444'); return; }
+  await setDoc(doc(db,'config','broadcast_ff'),{aktif:true,pesan,kategori:kat,timestamp:serverTimestamp()},{merge:true});
+  await addDoc(collection(db,'broadcast_riwayat_ff'),{pesan,kategori:kat,timestamp:serverTimestamp(),tanggal:new Date().toLocaleString('id-ID')});
+  _addLog('Kirim Broadcast',`${kat}: ${pesan.slice(0,40)}`);
+  showAdminToast('✅ Broadcast dikirim!');
+};
+window._hapusBroadcast = async () => {
+  await setDoc(doc(db,'config','broadcast_ff'),{aktif:false},{merge:true});
+  _addLog('Hapus Broadcast','—');
+  showAdminToast('✅ Broadcast dihapus!');
+};
+
+// ===== PENGATURAN =====
+window._loadPengaturan = () => {
+  onSnapshot(doc(db,'config','settings_ff'), snap => {
+    if (!snap.exists()) return;
+    const d=snap.data();
+    document.getElementById('setDiamond').value=d.diamondJumlah||100;
+    document.getElementById('setMaxPercobaan').value=d.maxPercobaan||3;
+    const el=document.getElementById('setEmailjsToggle');
+    if (el) el.checked = d.emailjsAktif!==false;
+  });
+  onSnapshot(doc(db,'config','maintenance_ff'), snap => {
+    if (snap.exists()) document.getElementById('maintenancePesanInput').value=snap.data().pesan||'';
+  });
+  onSnapshot(doc(db,'config','pengumuman_ff'), snap => {
+    if (snap.exists()) document.getElementById('pengumumanInput').value=snap.data().pesan||'';
+  });
+};
+window._simpanPengaturan = async () => {
+  const diamond=parseInt(document.getElementById('setDiamond').value)||100;
+  const maxP=parseInt(document.getElementById('setMaxPercobaan').value)||3;
+  const emailjs=document.getElementById('setEmailjsToggle').checked;
+  await setDoc(doc(db,'config','settings_ff'),{diamondJumlah:diamond,maxPercobaan:maxP,emailjsAktif:emailjs},{merge:true});
+  _addLog('Simpan Pengaturan',`Diamond: ${diamond} | Max: ${maxP}`);
+  showAdminToast('✅ Pengaturan disimpan!');
+};
+window._aktifkanMaintenance = async () => {
+  const pesan=document.getElementById('maintenancePesanInput').value.trim()||'Sedang dalam perbaikan. Mohon tunggu.';
+  await setDoc(doc(db,'config','maintenance_ff'),{aktif:true,pesan},{merge:true});
+  _addLog('Aktifkan Maintenance',pesan);
+  showAdminToast('✅ Maintenance aktif!');
+};
+window._nonaktifkanMaintenance = async () => {
+  await setDoc(doc(db,'config','maintenance_ff'),{aktif:false},{merge:true});
+  _addLog('Nonaktifkan Maintenance','—');
+  showAdminToast('✅ Maintenance dinonaktifkan!');
+};
+window._simpanPengumuman = async (aktif) => {
+  const pesan=document.getElementById('pengumumanInput').value.trim();
+  await setDoc(doc(db,'config','pengumuman_ff'),{aktif,pesan},{merge:true});
+  _addLog(aktif?'Tampilkan Pengumuman':'Sembunyikan Pengumuman',pesan.slice(0,40));
+  showAdminToast(aktif?'✅ Pengumuman ditampilkan!':'✅ Pengumuman disembunyikan!');
+};
+window._simpanPassAdmin = async () => {
+  const lama=document.getElementById('passLama').value.trim();
+  const baru=document.getElementById('passBaru').value.trim();
+  if (!lama||!baru) { showAdminToast('⚠️ Isi semua kolom password!','#ef4444'); return; }
+  const r=await window._gantiPassword(lama,baru);
+  if (r.ok) { showAdminToast('✅ Password berhasil diubah!'); document.getElementById('passLama').value=''; document.getElementById('passBaru').value=''; }
+  else showAdminToast(`❌ ${r.msg}`,'#ef4444');
+};
+
+// ===== ANALITIK =====
+window._loadAnalitik = async () => {
+  try {
+    const snap=await getDocs(query(collection(db,'klaim_ff'),orderBy('timestamp','desc')));
+    const byUID={};
+    snap.forEach(d=>{ const v=d.data(); const k=(v.uid||'').toLowerCase(); byUID[k]=(byUID[k]||0)+1; });
+    const top10=Object.entries(byUID).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const tbody=document.getElementById('analitikTbody');
+    if (!top10.length) { tbody.innerHTML='<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">Belum ada data</td></tr>'; return; }
+    tbody.innerHTML=top10.map(([uid,count],i)=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:9px 12px;font-weight:700;color:var(--muted);">${i+1}</td>
+      <td style="padding:9px 12px;font-weight:800;">${uid}</td>
+      <td style="padding:9px 12px;font-weight:900;color:var(--primary);">${count}x</td>
+    </tr>`).join('');
+    // Stats
+    const totalDiamond=snap.docs.reduce((s,d)=>s+(d.data().diamond||0),0);
+    document.getElementById('anStatTotal').textContent=snap.size;
+    document.getElementById('anStatDiamond').textContent=totalDiamond.toLocaleString('id-ID');
+    // Today
+    const today=new Date().toLocaleDateString('id-ID');
+    const todayCount=snap.docs.filter(d=>(d.data().tanggal||'').startsWith(today)).length;
+    document.getElementById('anStatHariIni').textContent=todayCount;
+  } catch(e){}
+};
+
+// ===== REFERRAL =====
+window._loadReferral = async () => {
+  const tbody=document.getElementById('refTbody');
+  tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);"><i class="fa-solid fa-spinner fa-spin"></i></td></tr>';
+  try {
+    const snap=await getDocs(query(collection(db,'referral_ff'),orderBy('total','desc')));
+    if (snap.empty) { tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);">Belum ada data referral</td></tr>'; return; }
+    const docs=snap.docs.map(d=>({id:d.id,...d.data()}));
+    const totalKlaim=docs.reduce((s,d)=>s+(d.total||0),0);
+    document.getElementById('refStatTotal').textContent=docs.length;
+    document.getElementById('refStatKlaim').textContent=totalKlaim;
+    document.getElementById('refStatTop').textContent=docs[0]?`${docs[0].uid} (${docs[0].total}x)`:'—';
+    tbody.innerHTML=docs.map((d,i)=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:9px 12px;font-weight:700;color:var(--muted);">${i+1}</td>
+      <td style="padding:9px 12px;font-weight:800;">${d.uid||'—'}</td>
+      <td style="padding:9px 12px;font-weight:900;color:var(--primary);letter-spacing:2px;">${d.code||'—'}</td>
+      <td style="padding:9px 12px;font-weight:800;">${d.total||0}x</td>
+      <td style="padding:9px 12px;font-weight:800;color:#f59e0b;">${d.poin||0}</td>
+      <td style="padding:9px 12px;"><button onclick="window._resetRefPoin('${d.id}','${d.uid||''}')" style="${btnStyle('#fff0f0','#ef4444','#ffd0d0')}"><i class="fa-solid fa-rotate-left"></i> Reset</button></td>
+    </tr>`).join('');
+  } catch(e){}
+};
+window._resetRefPoin = async (id, uid) => {
+  if (!await _confirm(`Reset poin referral UID ${uid}?`)) return;
+  await updateDoc(doc(db,'referral_ff',id),{poin:0});
+  _addLog('Reset Poin Referral',`UID: ${uid}`);
+  window._loadReferral();
+};
+
+// ===== SWITCH TAB =====
+window._switchTab = function(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden'));
+  const btn=document.getElementById('tab-'+tab);
+  if (btn) btn.classList.add('active');
+  const content=document.getElementById('content-'+tab);
+  if (content) content.classList.remove('hidden');
+  if (tab==='klaim') window._loadKlaim();
+  else if (tab==='permintaan') window._loadPermintaan();
+  else if (tab==='event') { window._loadEvent(); window._loadEventPeserta(); }
+  else if (tab==='kuis') window._loadKuis();
+  else if (tab==='resetlimit') window._loadRL();
+  else if (tab==='log') window._loadLog();
+  else if (tab==='blacklist') window._loadBlacklist();
+  else if (tab==='whitelist') window._loadWhitelist();
+  else if (tab==='pesan') window._loadPesan();
+  else if (tab==='analitik') window._loadAnalitik();
+  else if (tab==='referral') window._loadReferral();
+  else if (tab==='pengaturan') window._loadPengaturan();
+  else if (tab==='overview') window._loadOverview();
+};
+
+// helpers
+function btnStyle(bg,color,border) { return `padding:5px 10px;background:${bg};color:${color};border:1.5px solid ${border};border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;`; }
+window._btnStyle = btnStyle;
+</script>
+<style>
+  :root { --primary:#00c853;--primary2:#00e676;--bg:#f0fff6;--white:#ffffff;--border:#c8f0d8;--text:#1a2e1f;--muted:#5a8a6a;--sidebar:#ffffff; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  /* LOGIN */
+  #loginScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-box{background:white;border-radius:24px;padding:32px 24px;max-width:360px;width:100%;box-shadow:0 16px 48px rgba(0,200,83,.15);border:1.5px solid var(--border);}
+  .login-logo{font-size:48px;text-align:center;margin-bottom:10px;}
+  .login-title{font-size:1.3rem;font-weight:900;text-align:center;margin-bottom:4px;}
+  .login-sub{font-size:12px;font-weight:700;color:var(--muted);text-align:center;margin-bottom:20px;}
+  .login-input{width:100%;padding:13px 16px;border:2px solid var(--border);border-radius:12px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;outline:none;background:var(--bg);color:var(--text);margin-bottom:10px;}
+  .login-input:focus{border-color:var(--primary);}
+  .login-btn{width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,#00c853,#00e676);color:white;font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;}
+  .login-err{font-size:12px;font-weight:700;color:#ef4444;text-align:center;margin-top:8px;}
+
+  /* LAYOUT */
+  #adminApp{display:none;}
+  .admin-header{background:linear-gradient(135deg,#00c853,#00e676);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
+  .admin-header-title{font-size:16px;font-weight:900;color:white;display:flex;align-items:center;gap:8px;}
+  .logout-btn{padding:7px 14px;background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);border-radius:10px;color:white;font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;cursor:pointer;}
+
+  /* SIDEBAR / TABS */
+  .sidebar{background:var(--white);border-bottom:1.5px solid var(--border);padding:10px 12px;overflow-x:auto;display:flex;gap:4px;flex-wrap:nowrap;}
+  .tab-btn{padding:8px 12px;border:none;background:transparent;font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;color:var(--muted);cursor:pointer;border-radius:10px;white-space:nowrap;display:flex;align-items:center;gap:5px;transition:.2s;}
+  .tab-btn:hover{background:var(--bg);color:var(--text);}
+  .tab-btn.active{background:linear-gradient(135deg,#00c853,#00e676);color:white;}
+  .tab-sep{padding:8px 4px;color:var(--border);font-size:10px;font-weight:900;align-self:center;}
+  .badge{background:#ef4444;color:white;border-radius:50%;width:16px;height:16px;display:none;align-items:center;justify-content:center;font-size:9px;font-weight:900;flex-shrink:0;}
+
+  /* CONTENT */
+  .content{padding:16px;max-width:960px;margin:0 auto;}
+  .table-card{background:white;border-radius:18px;padding:18px;box-shadow:0 4px 16px rgba(0,200,83,.08);border:1.5px solid var(--border);margin-bottom:16px;}
+  .table-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+  .table-title{font-size:14px;font-weight:900;color:var(--text);display:flex;align-items:center;gap:7px;}
+  .tab-content{} .tab-content.hidden{display:none!important;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{padding:10px 12px;text-align:left;font-weight:900;color:var(--muted);background:var(--bg);}
+  .admin-input{width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:12px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;background:var(--bg);color:var(--text);outline:none;margin-bottom:10px;}
+  .admin-input:focus{border-color:var(--primary);}
+  .admin-btn{padding:10px 18px;border:none;border-radius:11px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+  .admin-btn-green{background:linear-gradient(135deg,#00c853,#00e676);color:white;}
+  .admin-btn-red{background:#fff0f0;color:#ef4444;border:1.5px solid #ffd0d0;}
+  .admin-btn-blue{background:#eff6ff;color:#3b82f6;border:1.5px solid #bfdbfe;}
+  .admin-btn-orange{background:linear-gradient(135deg,#ff9f43,#ff6b35);color:white;}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+  .stat-card{background:var(--bg);border:1.5px solid var(--border);border-radius:14px;padding:14px;text-align:center;}
+  .stat-num{font-size:24px;font-weight:900;color:var(--primary);}
+  .stat-lbl{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+  .ic-green{color:#00c853;} .ic-amber{color:#f59e0b;} .ic-red{color:#ef4444;} .ic-blue{color:#3b82f6;} .ic-indigo{color:#6366f1;} .ic-cyan{color:#00bcd4;} .ic-violet{color:#8b5cf6;}
+  .hidden{display:none!important;}
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:600px){.row-2{grid-template-columns:1fr;}}
+
+  /* TOAST */
+  #adminToast{position:fixed;bottom:24px;right:24px;background:#1a2e1f;color:white;padding:12px 18px;border-radius:14px;font-size:13px;font-weight:800;z-index:5000;opacity:0;transform:translateY(12px);transition:all .3s;pointer-events:none;}
+  #adminToast.show{opacity:1;transform:translateY(0);}
+
+  /* CONFIRM DIALOG */
+  #confirmOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);z-index:3000;display:none;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .2s;}
+  #confirmOverlay.show{opacity:1;}
+  #confirmBox{background:white;border-radius:20px;padding:24px 20px;max-width:300px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.18);}
+
+  /* TIPE DIALOG */
+  #tipeDialogOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);z-index:3000;display:none;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .2s;}
+  #tipeDialogOverlay.show{opacity:1;}
+
+  /* SOAL MODAL */
+  #soalModalOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);z-index:3000;display:none;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .2s;overflow-y:auto;}
+  #soalModalOverlay.show{opacity:1;}
+  #soalModal{background:white;border-radius:20px;padding:24px 20px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.18);}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">💎</div>
+    <div class="login-title">Admin Dashboard</div>
+    <div class="login-sub">Diamond Gratis Free Fire</div>
+    <input type="password" id="loginPass" class="login-input" placeholder="Password admin..." onkeydown="if(event.key==='Enter')doLogin()" />
+    <button class="login-btn" onclick="doLogin()">Masuk →</button>
+    <div class="login-err hidden" id="loginErr">❌ Password salah!</div>
+  </div>
+</div>
+
+<!-- ADMIN APP -->
+<div id="adminApp">
+  <!-- HEADER -->
+  <div class="admin-header">
+    <div class="admin-header-title"><i class="fa-solid fa-gem" style="color:#ffeb3b;"></i> Admin — Diamond FF</div>
+    <button class="logout-btn" onclick="doLogout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+  </div>
+
+  <!-- TABS -->
+  <div class="sidebar">
+    <button class="tab-btn active" id="tab-overview" onclick="window._switchTab('overview')"><i class="fa-solid fa-star ic-amber"></i> Overview</button>
+    <div class="tab-sep">|</div>
+    <button class="tab-btn" id="tab-klaim" onclick="window._switchTab('klaim')"><i class="fa-solid fa-list-check ic-green"></i> Daftar Klaim</button>
+    <button class="tab-btn" id="tab-permintaan" onclick="window._switchTab('permintaan')"><i class="fa-solid fa-envelope-open-text ic-amber"></i> Permintaan <div class="badge" id="permBadge">0</div></button>
+    <button class="tab-btn" id="tab-event" onclick="window._switchTab('event')"><i class="fa-solid fa-bolt ic-red"></i> Event</button>
+    <button class="tab-btn" id="tab-kuis" onclick="window._switchTab('kuis')"><i class="fa-solid fa-circle-question ic-blue"></i> Kelola Kuis</button>
+    <button class="tab-btn" id="tab-resetlimit" onclick="window._switchTab('resetlimit')"><i class="fa-solid fa-rotate-right ic-indigo"></i> Reset Limit <div class="badge" id="rlBadge">0</div></button>
+    <div class="tab-sep">|</div>
+    <button class="tab-btn" id="tab-log" onclick="window._switchTab('log')"><i class="fa-solid fa-scroll ic-violet"></i> Log</button>
+    <button class="tab-btn" id="tab-blacklist" onclick="window._switchTab('blacklist')"><i class="fa-solid fa-ban ic-red"></i> Blacklist</button>
+    <button class="tab-btn" id="tab-whitelist" onclick="window._switchTab('whitelist')"><i class="fa-solid fa-shield-check ic-green"></i> Whitelist</button>
+    <div class="tab-sep">|</div>
+    <button class="tab-btn" id="tab-pesan" onclick="window._switchTab('pesan')"><i class="fa-solid fa-inbox ic-blue"></i> Pesan <div class="badge" id="pesanBadge">0</div></button>
+    <button class="tab-btn" id="tab-broadcast" onclick="window._switchTab('broadcast')"><i class="fa-solid fa-bullhorn ic-amber"></i> Broadcast</button>
+    <div class="tab-sep">|</div>
+    <button class="tab-btn" id="tab-pengaturan" onclick="window._switchTab('pengaturan')"><i class="fa-solid fa-gear ic-slate" style="color:#64748b;"></i> Pengaturan</button>
+    <button class="tab-btn" id="tab-analitik" onclick="window._switchTab('analitik')"><i class="fa-solid fa-chart-line ic-violet"></i> Analitik</button>
+    <button class="tab-btn" id="tab-referral" onclick="window._switchTab('referral')"><i class="fa-solid fa-ticket ic-indigo"></i> Referral</button>
+  </div>
+
+  <div class="content">
+
+    <!-- OVERVIEW -->
+    <div id="content-overview" class="tab-content">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-num ic-green" id="ovTotalKlaim">—</div><div class="stat-lbl"><i class="fa-solid fa-gem ic-cyan"></i> Total Klaim</div></div>
+        <div class="stat-card"><div class="stat-num ic-amber" id="ovPending">—</div><div class="stat-lbl"><i class="fa-solid fa-clock ic-amber"></i> Permintaan</div></div>
+        <div class="stat-card"><div class="stat-num ic-blue" id="ovPesan">—</div><div class="stat-lbl"><i class="fa-solid fa-inbox ic-blue"></i> Pesan Baru</div></div>
+        <div class="stat-card"><div class="stat-num ic-indigo" id="ovRL">—</div><div class="stat-lbl"><i class="fa-solid fa-rotate ic-indigo"></i> Reset Limit</div></div>
+        <div class="stat-card"><div class="stat-num ic-red" id="ovBlacklist">—</div><div class="stat-lbl"><i class="fa-solid fa-ban ic-red"></i> Blacklist</div></div>
+        <div class="stat-card"><div class="stat-num ic-green" id="ovWhitelist">—</div><div class="stat-lbl"><i class="fa-solid fa-shield-check ic-green"></i> Whitelist</div></div>
+        <div class="stat-card"><div class="stat-num ic-violet" id="ovReferral">—</div><div class="stat-lbl"><i class="fa-solid fa-ticket ic-violet"></i> Referral</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-title"><i class="fa-solid fa-clock-rotate-left ic-muted" style="color:var(--muted)"></i> 5 Klaim Terbaru</div>
+        <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);">
+          <th>UID</th><th>Username</th><th>Diamond</th><th>Waktu</th>
+        </tr></thead><tbody id="ovRecentTbody"><tr><td colspan="4" style="text-align:center;padding:16px;color:var(--muted);font-weight:700;">Memuat...</td></tr></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- DAFTAR KLAIM -->
+    <div id="content-klaim" class="tab-content hidden table-card">
+      <div class="table-header">
+        <div class="table-title"><i class="fa-solid fa-list-check ic-green"></i> Daftar Klaim</div>
+        <button class="admin-btn admin-btn-red" onclick="window._hapusSemuaKlaim()"><i class="fa-solid fa-trash"></i> Hapus Semua</button>
+      </div>
+      <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);">
+        <th>#</th><th>UID</th><th>Username</th><th>Diamond</th><th>Aksi</th>
+      </tr></thead><tbody id="klaimTbody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);">Memuat...</td></tr></tbody></table></div>
+    </div>
+
+    <!-- PERMINTAAN -->
+    <div id="content-permintaan" class="tab-content hidden table-card">
+      <div class="table-title" style="margin-bottom:14px;"><i class="fa-solid fa-envelope-open-text ic-amber"></i> Permintaan Klaim Ulang</div>
+      <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);">
+        <th>UID</th><th>Username</th><th>Alasan</th><th>Status</th><th>Aksi</th>
+      </tr></thead><tbody id="permintaanTbody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);">Memuat...</td></tr></tbody></table></div>
+    </div>
+
+    <!-- EVENT -->
+    <div id="content-event" class="tab-content hidden">
+      <div class="table-card" style="margin-bottom:14px;">
+        <div class="table-header"><div class="table-title"><i class="fa-solid fa-bolt ic-red"></i> Kelola Event</div><span id="eventStatusBadge" style="font-size:13px;font-weight:800;"></span></div>
+        <div class="row-2">
+          <div><label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">💎 Diamond Event</label><input type="number" id="evDiamondInput" class="admin-input" value="200" /></div>
+          <div><label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">Max Peserta</label><input type="number" id="evMaxInput" class="admin-input" value="50" /></div>
+        </div>
+        <div class="row-2">
+          <div><label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">ID Event</label><input type="text" id="evIdInput" class="admin-input" placeholder="EV001" /></div>
+          <div><label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">Deadline (opsional)</label><input type="datetime-local" id="evDeadlineInput" class="admin-input" /></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="admin-btn admin-btn-green" onclick="window._aktifkanEvent()"><i class="fa-solid fa-play"></i> Aktifkan Event</button>
+          <button class="admin-btn admin-btn-red" onclick="window._matikanEvent()"><i class="fa-solid fa-stop"></i> Matikan Event</button>
+          <button class="admin-btn admin-btn-red" onclick="window._hapusSemuaEventPeserta()"><i class="fa-solid fa-trash"></i> Hapus Semua Peserta</button>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-title" style="margin-bottom:12px;"><i class="fa-solid fa-users ic-blue"></i> Peserta Event</div>
+        <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);"><th>#</th><th>UID</th><th>Username</th><th>Diamond</th><th>Aksi</th></tr></thead>
+        <tbody id="evPesertaTbody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);">Memuat...</td></tr></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- KELOLA KUIS -->
+    <div id="content-kuis" class="tab-content hidden table-card">
+      <div class="table-header">
+        <div class="table-title"><i class="fa-solid fa-circle-question ic-blue"></i> Kelola Soal Kuis</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="admin-btn admin-btn-green" onclick="window._tambahSoal()"><i class="fa-solid fa-plus"></i> Tambah Soal</button>
+          <button class="admin-btn admin-btn-red" onclick="window._hapusSemuaSoal()"><i class="fa-solid fa-trash"></i> Hapus Semua</button>
+        </div>
+      </div>
+      <div class="alert-info" style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:10px 14px;font-size:12px;font-weight:700;color:#1e40af;margin-bottom:14px;">
+        <i class="fa-solid fa-circle-info"></i> Soal ditampilkan berurutan. User harus jawab semua benar untuk klaim Diamond. Jika salah, soal direset dari awal.
+      </div>
+      <div id="kuisAdminWrap"></div>
+    </div>
+
+    <!-- RESET LIMIT -->
+    <div id="content-resetlimit" class="tab-content hidden table-card">
+      <div class="table-header">
+        <div class="table-title"><i class="fa-solid fa-rotate-right ic-indigo"></i> Request Reset Limit</div>
+        <button class="admin-btn admin-btn-red" onclick="window._hapusSemuaRL()"><i class="fa-solid fa-trash"></i> Hapus Semua</button>
+      </div>
+      <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);"><th>UID</th><th>Alasan</th><th>Status</th><th>Aksi</th></tr></thead>
+      <tbody id="rlTbody"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);">Memuat...</td></tr></tbody></table></div>
+    </div>
+
+    <!-- LOG -->
+    <div id="content-log" class="tab-content hidden table-card">
+      <div class="table-header">
+        <div class="table-title"><i class="fa-solid fa-scroll ic-violet"></i> Log Aktivitas Admin</div>
+        <button class="admin-btn admin-btn-red" onclick="window._hapusSemuaLog()"><i class="fa-solid fa-trash"></i> Hapus Log</button>
+      </div>
+      <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);"><th>Waktu</th><th>Aksi</th><th>Detail</th></tr></thead>
+      <tbody id="logTbody"><tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">Memuat...</td></tr></tbody></table></div>
+    </div>
+
+    <!-- BLACKLIST -->
+    <div id="content-blacklist" class="tab-content hidden table-card">
+      <div class="table-title" style="margin-bottom:14px;"><i class="fa-solid fa-ban ic-red"></i> Blacklist UID</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <input type="text" id="blUidInput" class="admin-input" placeholder="UID Free Fire..." style="flex:1;margin:0;" />
+        <input type="text" id="blAlasanInput" class="admin-input" placeholder="Alasan (opsional)..." style="flex:2;margin:0;" />
+        <button class="admin-btn admin-btn-red" onclick="window._tambahBlacklist()"><i class="fa-solid fa-plus"></i> Tambah</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+        <button class="admin-btn admin-btn-red" onclick="window._hapusSemuaBlacklist()"><i class="fa-solid fa-trash"></i> Hapus Semua</button>
+      </div>
+      <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);"><th>UID</th><th>Alasan</th><th>Aksi</th></tr></thead>
+      <tbody id="blTbody"><tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">Blacklist kosong</td></tr></tbody></table></div>
+    </div>
+
+    <!-- WHITELIST -->
+    <div id="content-whitelist" class="tab-content hidden table-card">
+      <div class="table-title" style="margin-bottom:14px;"><i class="fa-solid fa-shield-check ic-green"></i> Whitelist UID</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <input type="text" id="wlUidInput" class="admin-input" placeholder="UID Free Fire..." style="flex:1;margin:0;" />
+        <button class="admin-btn admin-btn-green" onclick="window._tambahWhitelist()"><i class="fa-solid fa-plus"></i> Tambah</button>
+        <button class="admin-btn admin-btn-red" onclick="window._hapusSemuaWhitelist()"><i class="fa-solid fa-trash"></i> Hapus Semua</button>
+      </div>
+      <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);"><th>UID</th><th>Aksi</th></tr></thead>
+      <tbody id="wlTbody"><tr><td colspan="2" style="text-align:center;padding:20px;color:var(--muted);">Whitelist kosong</td></tr></tbody></table></div>
+    </div>
+
+    <!-- PESAN -->
+    <div id="content-pesan" class="tab-content hidden table-card">
+      <div class="table-header">
+        <div class="table-title"><i class="fa-solid fa-inbox ic-blue"></i> Pesan Masuk</div>
+        <button class="admin-btn admin-btn-red" onclick="window._hapusSemuaPesan()"><i class="fa-solid fa-trash"></i> Hapus Semua</button>
+      </div>
+      <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);"><th>UID</th><th>Pesan</th><th>Aksi</th></tr></thead>
+      <tbody id="pesanTbody"><tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">Belum ada pesan</td></tr></tbody></table></div>
+    </div>
+
+    <!-- BROADCAST -->
+    <div id="content-broadcast" class="tab-content hidden table-card">
+      <div class="table-title" style="margin-bottom:14px;"><i class="fa-solid fa-bullhorn ic-amber"></i> Kirim Broadcast</div>
+      <select id="broadcastKat" class="admin-input">
+        <option value="info">ℹ️ Info</option>
+        <option value="peringatan">⚠️ Peringatan</option>
+        <option value="darurat">🚨 Darurat</option>
+      </select>
+      <textarea id="broadcastPesan" class="admin-input" rows="3" placeholder="Tulis pesan broadcast..."></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="admin-btn admin-btn-green" onclick="window._kirimBroadcast()"><i class="fa-solid fa-paper-plane"></i> Kirim</button>
+        <button class="admin-btn admin-btn-red" onclick="window._hapusBroadcast()"><i class="fa-solid fa-trash"></i> Hapus Broadcast</button>
+      </div>
+    </div>
+
+    <!-- PENGATURAN -->
+    <div id="content-pengaturan" class="tab-content hidden">
+      <div class="row-2">
+        <div class="table-card">
+          <div class="table-title" style="margin-bottom:14px;"><i class="fa-solid fa-gem ic-cyan"></i> Jumlah Diamond</div>
+          <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">💎 Diamond per klaim</label>
+          <input type="number" id="setDiamond" class="admin-input" value="100" />
+          <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">Max Percobaan (per jam)</label>
+          <input type="number" id="setMaxPercobaan" class="admin-input" value="3" />
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;">
+            <input type="checkbox" id="setEmailjsToggle" checked style="width:16px;height:16px;" />
+            <span style="font-size:13px;font-weight:700;">Aktifkan EmailJS notifikasi</span>
+          </label>
+          <button class="admin-btn admin-btn-green" onclick="window._simpanPengaturan()"><i class="fa-solid fa-floppy-disk"></i> Simpan</button>
+        </div>
+        <div class="table-card">
+          <div class="table-title" style="margin-bottom:14px;"><i class="fa-solid fa-triangle-exclamation ic-red"></i> Maintenance</div>
+          <input type="text" id="maintenancePesanInput" class="admin-input" placeholder="Pesan maintenance..." />
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="admin-btn admin-btn-red" onclick="window._aktifkanMaintenance()"><i class="fa-solid fa-toggle-on"></i> Aktifkan</button>
+            <button class="admin-btn" style="background:#f3f4f6;color:#6b7280;border:1.5px solid #e5e7eb;" onclick="window._nonaktifkanMaintenance()"><i class="fa-solid fa-toggle-off"></i> Nonaktifkan</button>
+          </div>
+          <hr style="border:none;border-top:1.5px solid var(--border);margin:14px 0;" />
+          <div class="table-title" style="margin-bottom:10px;"><i class="fa-solid fa-bell ic-amber"></i> Pengumuman</div>
+          <textarea id="pengumumanInput" class="admin-input" rows="2" placeholder="Teks pengumuman..."></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="admin-btn admin-btn-green" onclick="window._simpanPengumuman(true)"><i class="fa-solid fa-eye"></i> Tampilkan</button>
+            <button class="admin-btn" style="background:#f3f4f6;color:#6b7280;border:1.5px solid #e5e7eb;" onclick="window._simpanPengumuman(false)"><i class="fa-solid fa-eye-slash"></i> Sembunyikan</button>
+          </div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-title" style="margin-bottom:14px;"><i class="fa-solid fa-lock ic-indigo"></i> Ganti Password Admin</div>
+        <div class="row-2">
+          <input type="password" id="passLama" class="admin-input" placeholder="Password lama..." />
+          <input type="password" id="passBaru" class="admin-input" placeholder="Password baru..." />
+        </div>
+        <button class="admin-btn admin-btn-green" onclick="window._simpanPassAdmin()"><i class="fa-solid fa-key"></i> Ganti Password</button>
+      </div>
+    </div>
+
+    <!-- ANALITIK -->
+    <div id="content-analitik" class="tab-content hidden">
+      <div class="stat-grid" style="margin-bottom:16px;">
+        <div class="stat-card"><div class="stat-num ic-green" id="anStatTotal">—</div><div class="stat-lbl">Total Klaim</div></div>
+        <div class="stat-card"><div class="stat-num ic-cyan" id="anStatDiamond">—</div><div class="stat-lbl">💎 Total Diamond</div></div>
+        <div class="stat-card"><div class="stat-num ic-amber" id="anStatHariIni">—</div><div class="stat-lbl">Klaim Hari Ini</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-title" style="margin-bottom:12px;"><i class="fa-solid fa-trophy ic-amber"></i> Top 10 UID Terbanyak Klaim</div>
+        <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);"><th>#</th><th>UID</th><th>Jumlah</th></tr></thead>
+        <tbody id="analitikTbody"><tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">Memuat...</td></tr></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- REFERRAL -->
+    <div id="content-referral" class="tab-content hidden table-card">
+      <div class="table-header">
+        <div class="table-title"><i class="fa-solid fa-ticket ic-indigo"></i> Data Referral</div>
+        <button class="admin-btn" style="background:var(--bg);border:1.5px solid var(--border);" onclick="window._loadReferral()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+      </div>
+      <div class="stat-grid" style="margin-bottom:14px;">
+        <div class="stat-card"><div class="stat-num ic-green" id="refStatTotal">—</div><div class="stat-lbl">Referrer</div></div>
+        <div class="stat-card"><div class="stat-num ic-blue" id="refStatKlaim">—</div><div class="stat-lbl">Total Referral</div></div>
+        <div class="stat-card" style="grid-column:span 2;"><div class="stat-num" style="font-size:14px;color:var(--primary);font-weight:900;" id="refStatTop">—</div><div class="stat-lbl">Terbanyak</div></div>
+      </div>
+      <div style="overflow-x:auto;"><table><thead><tr style="background:var(--bg);"><th>#</th><th>UID</th><th>Kode</th><th>Total</th><th>Poin</th><th>Aksi</th></tr></thead>
+      <tbody id="refTbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);">Memuat...</td></tr></tbody></table></div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /adminApp -->
+
+<!-- TOAST -->
+<div id="adminToast">—</div>
+
+<!-- CONFIRM DIALOG -->
+<div id="confirmOverlay" style="display:none;">
+  <div id="confirmBox">
+    <div style="font-size:28px;text-align:center;margin-bottom:8px;">⚠️</div>
+    <div id="confirmMsg" style="font-size:14px;font-weight:700;text-align:center;color:var(--text);margin-bottom:16px;line-height:1.5;"></div>
+    <div style="display:flex;gap:8px;">
+      <button id="confirmOk" style="flex:1;padding:11px;border:none;border-radius:11px;background:linear-gradient(135deg,#ef4444,#c0392b);color:white;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;cursor:pointer;">Ya, Lanjutkan</button>
+      <button id="confirmCancel" style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:11px;background:var(--bg);color:var(--muted);font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;cursor:pointer;">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- TIPE DIALOG -->
+<div id="tipeDialogOverlay" style="display:none;">
+  <div style="background:white;border-radius:20px;padding:24px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.18);">
+    <div style="font-size:13px;font-weight:900;margin-bottom:6px;">Tipe Persetujuan</div>
+    <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:16px;">Pilih cara menyetujui permintaan klaim ulang:</div>
+    <button id="tipeResetBtn" class="admin-btn admin-btn-orange" style="width:100%;margin-bottom:8px;justify-content:flex-start;">
+      <i class="fa-solid fa-rotate"></i> Reset — Hapus klaim lama, ganti baru
+    </button>
+    <button id="tipeTambahBtn" class="admin-btn admin-btn-blue" style="width:100%;margin-bottom:8px;justify-content:flex-start;">
+      <i class="fa-solid fa-plus"></i> Tambahan — Biarkan klaim lama + tambah baru
+    </button>
+    <button id="tipeCancelBtn" class="admin-btn" style="width:100%;background:var(--bg);color:var(--muted);border:1.5px solid var(--border);">Batal</button>
+  </div>
+</div>
+
+<!-- SOAL MODAL -->
+<div id="soalModalOverlay" style="display:none;">
+  <div id="soalModal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:900;" id="soalModalTitle">Tambah Soal</div>
+      <button onclick="window._closeSoalModal()" style="border:none;background:none;cursor:pointer;font-size:18px;color:var(--muted);">✕</button>
+    </div>
+    <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">Pertanyaan</label>
+    <textarea id="soalInput" class="admin-input" rows="3" placeholder="Tulis pertanyaan kuis..."></textarea>
+    <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">Pilihan Jawaban</label>
+    <input type="text" id="pilA" class="admin-input" placeholder="Pilihan A" />
+    <input type="text" id="pilB" class="admin-input" placeholder="Pilihan B" />
+    <input type="text" id="pilC" class="admin-input" placeholder="Pilihan C" />
+    <input type="text" id="pilD" class="admin-input" placeholder="Pilihan D" />
+    <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;margin-top:4px;">Jawaban Benar</label>
+    <select id="jawabanSelect" class="admin-input">
+      <option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option>
+    </select>
+    <button id="soalSaveBtn" class="admin-btn admin-btn-green" style="width:100%;justify-content:center;margin-top:4px;"><i class="fa-solid fa-floppy-disk"></i> Simpan Soal</button>
+  </div>
+</div>
+
+<script>
+  // ===== TOAST =====
+  let _toastTimer;
+  function showAdminToast(msg, bg) {
+    const el = document.getElementById('adminToast');
+    el.textContent = msg;
+    el.style.background = bg || '#1a2e1f';
+    clearTimeout(_toastTimer);
+    el.classList.add('show');
+    _toastTimer = setTimeout(()=>el.classList.remove('show'), 2500);
+  }
+  window.showAdminToast = showAdminToast;
+
+  // ===== CONFIRM =====
+  function _confirm(msg) {
+    return new Promise(resolve => {
+      const ov=document.getElementById('confirmOverlay');
+      ov.style.display='flex'; requestAnimationFrame(()=>ov.classList.add('show'));
+      document.getElementById('confirmMsg').textContent=msg;
+      const close=(v)=>{ ov.classList.remove('show'); setTimeout(()=>ov.style.display='none',200); resolve(v); };
+      document.getElementById('confirmOk').onclick=()=>close(true);
+      document.getElementById('confirmCancel').onclick=()=>close(false);
+    });
+  }
+  window._confirm = _confirm;
+
+  // ===== LOGIN =====
+  async function doLogin() {
+    const pass = document.getElementById('loginPass').value;
+    if (!pass) return;
+    const ok = await (window._login ? window._login(pass) : pass==='admin123');
+    if (ok) {
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('adminApp').style.display='block';
+      window._switchTab('overview');
+    } else {
+      document.getElementById('loginErr').classList.remove('hidden');
+      setTimeout(()=>document.getElementById('loginErr').classList.add('hidden'),2500);
+    }
+  }
+  function doLogout() {
+    document.getElementById('loginPass').value='';
+    document.getElementById('adminApp').style.display='none';
+    document.getElementById('loginScreen').style.display='flex';
+  }
+</script>
+</body>
+</html>
