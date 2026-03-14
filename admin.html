@@ -1129,7 +1129,7 @@ window._login = async () => {
     if (!snap.exists()) { errEl.textContent = '❌ Config tidak ditemukan!'; errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Masuk →'; return; }
     if (val === snap.data().password) {
       sessionStorage.setItem('adminAuth', 'true');
-      localStorage.setItem('adminAuth', 'true');
+      localStorage.setItem('adminAuth_ff', 'true');
       showDashboard();
     } else {
       errEl.textContent = '❌ Password salah!'; errEl.style.display = 'block';
@@ -1142,7 +1142,7 @@ window._login = async () => {
 
 window._logout = () => {
   sessionStorage.removeItem('adminAuth');
-  localStorage.removeItem('adminAuth');
+  localStorage.removeItem('adminAuth_ff');
   if (unsubKlaim) { unsubKlaim(); unsubKlaim = null; }
   if (unsubReq) { unsubReq(); unsubReq = null; }
   document.getElementById('dashboard').classList.add('hidden');
@@ -1166,7 +1166,7 @@ function showDashboard() {
 }
 
 window.addEventListener('load', () => {
-  if (sessionStorage.getItem('adminAuth') === 'true' || localStorage.getItem('adminAuth') === 'true') showDashboard();
+  if (sessionStorage.getItem('adminAuth') === 'true' || localStorage.getItem('adminAuth_ff') === 'true') showDashboard();
 });
 
 // ===== REALTIME LISTENERS =====
@@ -1829,7 +1829,7 @@ window._setujuRL = async (id) => {
   await setDoc(doc(db, "permintaan_rl", id), { status: 'approved' }, { merge: true });
   // Simpan flag reset di Firestore — index akan baca dan clear localStorage
   if (username) {
-    await setDoc(doc(db, "config", "reset_rl_" + username), { aktif: true, approvedAt: serverTimestamp() });
+    await setDoc(doc(db, "config", "reset_rl_ff_" + username), { aktif: true, approvedAt: serverTimestamp() });
   }
   _addLog('Setujui Reset Limit', `Username: ${username||id}`);
   kirimBrowserNotif('✅ Permintaan Disetujui', 'Rate limit request telah disetujui');
@@ -2107,7 +2107,7 @@ window._kirimBroadcast = async () => {
   const kategori = document.querySelector('input[name="bcKategori"]:checked')?.value || 'info';
   const status = document.getElementById('broadcastStatus');
   if (!pesan) { status.textContent = '⚠️ Tulis pesan dulu!'; status.style.color='#ef4444'; return; }
-  await setDoc(doc(db, 'config', 'broadcast'), { pesan, kategori, aktif: true, timestamp: serverTimestamp() });
+  await setDoc(doc(db, 'config', 'broadcast_ff'), { pesan, kategori, aktif: true, timestamp: serverTimestamp() });
   await addDoc(collection(db, 'broadcast_riwayat_ff'), { pesan, kategori, timestamp: serverTimestamp() });
   document.getElementById('broadcastPesan').value = '';
   status.textContent = '✅ Broadcast berhasil dikirim!'; status.style.color='#00c853';
@@ -2116,7 +2116,7 @@ window._kirimBroadcast = async () => {
   setTimeout(() => status.textContent = '', 3000);
 };
 window._hapusBroadcast = async () => {
-  await setDoc(doc(db, 'config', 'broadcast'), { aktif: false }, { merge: true });
+  await setDoc(doc(db, 'config', 'broadcast_ff'), { aktif: false }, { merge: true });
   _addLog('Sembunyikan Broadcast', '');
   const s = document.getElementById('broadcastStatus');
   s.textContent = '✅ Broadcast disembunyikan!'; s.style.color='#00c853';
@@ -2144,7 +2144,7 @@ window._loadPengaturan = async () => {
     else {  document.getElementById('setDiamondNormal').value = 100; }
   } catch(e) {}
   try {
-    const snap = await getDoc(doc(db, 'config', 'settings'));
+    const snap = await getDoc(doc(db, 'config', 'settings_ff'));
     if (snap.exists()) document.getElementById('setRateLimit').value = snap.data().maxPercobaan||3;
   } catch(e) {}
 };
@@ -2163,7 +2163,7 @@ window._simpanRateLimit = async () => {
   const max = parseInt(document.getElementById('setRateLimit').value);
   const status = document.getElementById('rateLimitStatus');
   if (!max||max<1) { status.textContent='⚠️ Masukkan angka minimal 1!'; status.style.color='#ef4444'; return; }
-  await setDoc(doc(db, 'config', 'settings'), { maxPercobaan: max }, { merge: true });
+  await setDoc(doc(db, 'config', 'settings_ff'), { maxPercobaan: max }, { merge: true });
   _addLog('Ubah Rate Limit', `Maks. ${max}x per jam`);
   status.textContent=`✅ Rate limit: ${max}x per jam`; status.style.color='#00c853';
   setTimeout(() => status.textContent='', 3000);
@@ -2175,7 +2175,7 @@ window._gantiPassword = async () => {
   if (!baru) { status.textContent='⚠️ Masukkan password baru!'; status.style.color='#ef4444'; return; }
   if (baru!==konfirm) { status.textContent='⚠️ Password tidak cocok!'; status.style.color='#ef4444'; return; }
   if (baru.length<6) { status.textContent='⚠️ Minimal 6 karakter!'; status.style.color='#ef4444'; return; }
-  await setDoc(doc(db, 'config', 'admin'), { password: baru }, { merge: true });
+  await setDoc(doc(db, 'config', 'admin_ff'), { password: baru }, { merge: true });
   _addLog('Ganti Password', 'Password admin diubah');
   document.getElementById('setPasswordBaru').value=''; document.getElementById('setPasswordKonfirm').value='';
   status.textContent='✅ Password berhasil diubah!'; status.style.color='#00c853';
