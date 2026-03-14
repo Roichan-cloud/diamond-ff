@@ -1437,7 +1437,7 @@
 
   async function cekKodeReferral(code) {
     if (!code || code.length < 5) return null;
-    const snap = await getDocs(query(collection(db, 'referral'), where('code', '==', code.toUpperCase())));
+    const snap = await getDocs(query(collection(db, 'referral_ff'), where('code', '==', code.toUpperCase())));
     if (snap.empty) return null;
     return { id: snap.docs[0].id, ...snap.docs[0].data() };
   }
@@ -1446,7 +1446,7 @@
     try {
       const refDoc = doc(db, 'referral', referrerUsername.toLowerCase());
       await updateDoc(refDoc, { total: increment(1), poin: increment(1) });
-      await addDoc(collection(db, 'referral_log'), {
+      await addDoc(collection(db, 'referral_log_ff'), {
         referrer: referrerUsername,
         claimer,
         timestamp: serverTimestamp()
@@ -1780,7 +1780,7 @@
   window._cekUsername = async function(username) {
     try {
       // Cek whitelist dulu — kalau ada, boleh klaim berkali-kali tanpa persetujuan
-      const wlSnap = await getDocs(query(collection(db, 'whitelist'), where('usernameLower', '==', username.toLowerCase())));
+      const wlSnap = await getDocs(query(collection(db, 'whitelist_ff'), where('usernameLower', '==', username.toLowerCase())));
       if (!wlSnap.empty) return { status: 'new' };
 
       const q = query(collection(db, "klaim_ff"), where("usernameLower", "==", username.toLowerCase()));
@@ -1913,13 +1913,13 @@
 
   // ===== KIRIM PESAN KE ADMIN =====
   window._kirimPesanAdmin = async (username, pesan) => {
-    await addDoc(collection(db, 'pesan_masuk'), { username: username || 'Anonim', pesan, dibaca: false, timestamp: serverTimestamp() });
+    await addDoc(collection(db, 'pesan_ff'), { username: username || 'Anonim', pesan, dibaca: false, timestamp: serverTimestamp() });
   };
 
   // ===== CEK BLACKLIST =====
   window._cekBlacklist = async (username) => {
     try {
-      const snap = await getDocs(query(collection(db, 'blacklist'), where('usernameLower', '==', username.toLowerCase())));
+      const snap = await getDocs(query(collection(db, 'blacklist_ff'), where('usernameLower', '==', username.toLowerCase())));
       if (snap.empty) return null;
       return snap.docs[0].data().alasan || '';
     } catch(e) { return null; }
