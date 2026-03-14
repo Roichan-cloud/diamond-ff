@@ -1124,7 +1124,7 @@
       }
     } catch(e) {}
     const _wUser = document.getElementById('winUser'); if(_wUser) _wUser.textContent = namaVal + ' (UID: ' + val + ')';
-    const _wAvatar = document.getElementById('winAvatar'); if(_wAvatar && avatarUrl){ _wAvatar.src=avatarUrl; _wAvatar.style.display=''; }
+    const _wAvatar = document.getElementById('winAvatar'); if(_wAvatar) _wAvatar.style.display='none';
     hideLoading();
     show('s3'); setSteps(2);
     tembakConfettiCustom(diamondJumlah, false);
