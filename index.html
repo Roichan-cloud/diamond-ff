@@ -546,21 +546,7 @@
     });
 
     // ===== LOADING SCREEN =====
-    const ls = document.getElementById('loadingScreen');
-    // Tunggu counter & font siap, lalu fade out
-    setTimeout(() => {
-      ls.classList.add('fade-out');
-      setTimeout(() => { ls.style.display = 'none'; }, 500);
-      // Confetti pembuka — hanya sekali per sesi
-      if (!sessionStorage.getItem('ffConfettiOpened')) {
-        sessionStorage.setItem('ffConfettiOpened', '1');
-        setTimeout(() => {
-          confetti({ particleCount: 80, spread: 100, origin: { y: 0.3 }, colors: ['#00c853','#00e676','#b2f5d8','#ffffff','#ffeb3b'] });
-          setTimeout(() => confetti({ particleCount: 60, spread: 80, origin: { y: 0.4, x: 0.2 }, colors: ['#00c853','#69f0ae','#ffffff'] }), 300);
-          setTimeout(() => confetti({ particleCount: 60, spread: 80, origin: { y: 0.4, x: 0.8 }, colors: ['#00e676','#b2f5d8','#ffeb3b'] }), 500);
-        }, 200);
-      }
-    }, 1800);
+    // (dipindah ke luar window.load agar pasti jalan)
 
     // Scroll to top button
     const scrollBtn = document.getElementById('scrollTopBtn');
@@ -833,6 +819,26 @@
 <body>
 <script>
   emailjs.init("i63TMFLxk7CxJLfee");
+
+  // ===== LOADING SCREEN — dijamin jalan =====
+  function _hideLS() {
+    const ls = document.getElementById('loadingScreen');
+    if (!ls || ls.style.display === 'none') return;
+    ls.classList.add('fade-out');
+    setTimeout(() => { ls.style.display = 'none'; }, 500);
+    if (!sessionStorage.getItem('ffConfettiOpened')) {
+      sessionStorage.setItem('ffConfettiOpened', '1');
+      setTimeout(() => {
+        if (typeof confetti !== 'undefined') {
+          confetti({ particleCount: 80, spread: 100, origin: { y: 0.3 }, colors: ['#00c853','#00e676','#b2f5d8','#ffffff','#ffeb3b'] });
+        }
+      }, 300);
+    }
+  }
+  setTimeout(_hideLS, 1800);
+  setTimeout(_hideLS, 4000);
+  window.addEventListener('load', () => setTimeout(_hideLS, 1500));
+
   const cols = ['#b2f5d8','#c8f5b2','#f5f0b2','#b2e8f5','#d8b2f5'];
   for (let i = 0; i < 18; i++) {
     const b = document.createElement('div'); b.className = 'bubble';
