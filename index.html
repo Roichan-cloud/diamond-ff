@@ -34,528 +34,7 @@
   .ls-dot:nth-child(3) { animation-delay: .4s; }
   @keyframes lsDot { 0%,80%,100%{transform:scale(.6);opacity:.4} 40%{transform:scale(1);opacity:1} }
 </style>
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, updateDoc, query, where, orderBy, limit, serverTimestamp, doc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDM4ZMnwe0ERm0M5NKG9wfFVNslxoXmlhA",
-    authDomain: "diamond-ff-id.firebaseapp.com",
-    projectId: "diamond-ff-id",
-    storageBucket: "diamond-ff-id.firebasestorage.app",
-    messagingSenderId: "972986074496",
-    appId: "1:972986074496:web:b03289e638a0f46fcda3fa"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  window._db = db;
-
-  // ===== COUNTER FLIP (odometer style) =====
-  let _currentCounterVal = -1;
-
-  function renderCounterDigits(num) {
-    const str = num.toLocaleString('id-ID');
-    const container = document.getElementById('counterDigits');
-    if (!container) return;
-    const oldStr = container.dataset.val || '';
-    container.dataset.val = str;
-    let html = '';
-    for (let i = 0; i < str.length; i++) {
-      const ch = str[i];
-      const oldIdx = i - (str.length - oldStr.length);
-      const oldCh = oldIdx >= 0 ? oldStr[oldIdx] : '';
-      const changed = ch !== oldCh && /\d/.test(ch);
-      html += `<span class="counter-digit-wrap"><span class="counter-digit${changed?' flip-in':''}">${ch}</span></span>`;
-    }
-    container.innerHTML = html;
-  }
-
-  window._loadCounter = async function() {
-    try {
-      const snap = await getDoc(doc(db, "config", "stats_ff"));
-      const total = snap.exists() ? (snap.data().totalKlaim || 0) : 0;
-      renderCounterDigits(0);
-      setTimeout(() => animateCounterFlip(0, total), 500);
-    } catch(e) {}
-  };
-
-  function animateCounterFlip(start, target) {
-    if (target === start) { _currentCounterVal = target; renderCounterDigits(target); return; }
-    const duration = Math.min(2000, 700 + Math.abs(target - start) * 5);
-    const startTime = performance.now();
-    function step(now) {
-      const progress = Math.min((now - startTime) / duration, 1);
-      const ease = 1 - Math.pow(2, -10 * progress);
-      const cur = Math.round(start + (target - start) * ease);
-      renderCounterDigits(cur);
-      if (progress < 1) requestAnimationFrame(step);
-      else { _currentCounterVal = target; renderCounterDigits(target); }
-    }
-    requestAnimationFrame(step);
-  }
-
-  function listenCounter() {
-    onSnapshot(doc(db, "config", "stats_ff"), (snap) => {
-      if (!snap.exists()) return;
-      const newVal = snap.data().totalKlaim || 0;
-      if (newVal !== _currentCounterVal) {
-        animateCounterFlip(_currentCounterVal < 0 ? newVal : _currentCounterVal, newVal);
-        _currentCounterVal = newVal;
-      }
-    });
-  }
-
-  // ===== LEADERBOARD animasi smooth =====
-  let _lbPrevUsernames = [];
-  let _lbUnsub = null;
-
-  window._listenLeaderboard = function() {
-    // Unsubscribe listener lama jika ada (e.g. saat toggle username)
-    if (_lbUnsub) { _lbUnsub(); _lbUnsub = null; }
-    _lbPrevUsernames = [];
-    try {
-      const q = query(collection(db, "klaim_ff"), orderBy("timestamp", "desc"), limit(5));
-      _lbUnsub = onSnapshot(q, (snap) => {
-        const docs = [];
-        snap.forEach(d => docs.push(d.data()));
-        renderLeaderboardAnimated(docs);
-      });
-    } catch(e) {}
-  };
-
-  // ===== TOGGLE SHOW USERNAME =====
-  function maskUsername(username, showFull) {
-    if (!username) return '???';
-    if (showFull) return username;
-    const len = username.length;
-    if (len <= 2) return username;
-    return username.slice(0, 2) + '*'.repeat(len - 2);
-  }
-
-  function rankBadge(i) {
-    const labels = ['1','2','3','4','5'];
-    const cls = i === 0 ? 'lb-rank-1' : i === 1 ? 'lb-rank-2' : i === 2 ? 'lb-rank-3' : 'lb-rank-other';
-    return `<div class="lb-rank"><div class="lb-rank-badge ${cls}">${i + 1}</div></div>`;
-  }
-
-  function buildLbItem(d, i, cls = '') {
-    const masked = maskUsername(d.username||'???', d.showUsername);
-    return `<div class="lb-item${cls ? ' '+cls : ''}" data-key="${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}">
-      ${rankBadge(i)}
-      <div class="lb-name">${masked}</div>
-      <div class="lb-badge"><i class="fa-solid fa-gem ic-cyan"></i> ${d.diamond||100} 💎</div>
-    </div>`;
-  }
-
-  function renderLeaderboardAnimated(docs) {
-    const el = document.getElementById('leaderboardList');
-    if (!el) return;
-    if (docs.length === 0) {
-      el.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;font-weight:700;padding:12px 0;">Jadilah yang pertama klaim! 🎉</div>`;
-      _lbPrevUsernames = []; return;
-    }
-    const newKeys = docs.map((d,i) => `${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`);
-    const isFirst = _lbPrevUsernames.length === 0;
-
-    if (isFirst) {
-      el.innerHTML = docs.map((d, i) => buildLbItem(d, i, 'lb-new')).join('');
-      // stagger delay
-      el.querySelectorAll('.lb-item.lb-new').forEach((item, i) => {
-        item.style.animationDelay = `${i * 80}ms`;
-      });
-      _lbPrevUsernames = newKeys;
-      return;
-    }
-
-    const addedKeys = newKeys.filter(k => !_lbPrevUsernames.includes(k));
-    if (addedKeys.length === 0) { _lbPrevUsernames = newKeys; return; }
-
-    // Ada item baru — animasi scroll down:
-    // 1. Render item baru di posisi 1 dengan lb-new
-    // 2. Render item lama (yang masih ada) dengan lb-shift (geser turun)
-    // 3. Item yang hilang (rank 5/10) tidak dirender
-    el.style.overflow = 'hidden';
-    const oldItems = Array.from(el.querySelectorAll('.lb-item'));
-    const keepCount = docs.length - addedKeys.length; // berapa item lama yang masih muncul
-
-    // Tandai item lama yang akan keluar (rank terakhir yang hilang)
-    // Jumlah yang hilang = addedKeys.length
-    const exitCount = Math.min(addedKeys.length, oldItems.length);
-    oldItems.slice(oldItems.length - exitCount).forEach(item => {
-      item.classList.add('lb-exit');
-    });
-
-    setTimeout(() => {
-      // Rebuild semua dengan animasi
-      el.innerHTML = docs.map((d, i) => {
-        const key = `${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`;
-        const cls = addedKeys.includes(key) ? 'lb-new' : 'lb-shift';
-        return buildLbItem(d, i, cls);
-      }).join('');
-      _lbPrevUsernames = newKeys;
-    }, 420);
-  }
-
-  // ===== CEK STATUS PERMINTAAN =====
-  window._cekStatus = async function(username) {
-    try {
-      const q = query(collection(db, "permintaan_ff"), where("usernameLower", "==", username.toLowerCase()));
-      const snap = await getDocs(q);
-      if (snap.empty) return { found: false };
-      // Ambil yang terbaru manual
-      const docs = [];
-      snap.forEach(d => docs.push(d.data()));
-      docs.sort((a, b) => {
-        const ta = a.timestamp?.toMillis?.() ?? 0;
-        const tb = b.timestamp?.toMillis?.() ?? 0;
-        return tb - ta;
-      });
-      return { found: true, ...docs[0] };
-    } catch(e) { return { found: false }; }
-  };
-
-  window._cekUsername = async function(username) {
-    try {
-      // Cek whitelist dulu — kalau ada, boleh klaim berkali-kali tanpa persetujuan
-      const wlSnap = await getDocs(query(collection(db, 'whitelist'), where('usernameLower', '==', username.toLowerCase())));
-      if (!wlSnap.empty) return { status: 'new' };
-
-      const q = query(collection(db, "klaim_ff"), where("usernameLower", "==", username.toLowerCase()));
-      const snap = await getDocs(q);
-      if (snap.empty) return { status: 'new' };
-
-      // Sudah pernah klaim — cek apakah ada permintaan yang disetujui admin
-      const qReq = query(collection(db, "permintaan_ff"),
-        where("usernameLower", "==", username.toLowerCase()),
-        where("status", "==", "approved"));
-      const snapReq = await getDocs(qReq);
-      if (!snapReq.empty) return { status: 'new' }; // boleh klaim lagi
-      return { status: 'exists' };
-    } catch(e) { return { status: 'new' }; }
-  };
-
-  window._saveKlaim = async function(username, userId, avatarUrl, diamondJumlah, showUsername) {
-    try {
-      await addDoc(collection(db, "klaim_ff"), {
-        username, usernameLower: username.toLowerCase(),
-        userId, avatarUrl,
-        diamond: diamondJumlah || 100,
-        showUsername: showUsername === true,
-        timestamp: serverTimestamp(),
-        tanggal: new Date().toLocaleString('id-ID'),
-        status: 'claimed'
-      });
-      // Atomic increment
-      await setDoc(doc(db, "config", "stats_ff"), { totalKlaim: increment(1) }, { merge: true });
-      // Tandai permintaan approved sebagai 'used' agar tidak bisa klaim lagi tanpa permintaan baru
-      try {
-        const qReq = query(collection(db, "permintaan_ff"),
-          where("usernameLower", "==", username.toLowerCase()),
-          where("status", "==", "approved"));
-        const snapReq = await getDocs(qReq);
-        snapReq.forEach(async d => await updateDoc(doc(db, "permintaan", d.id), { status: 'used' }));
-      } catch(e2) {}
-    } catch(e) { console.error('saveKlaim error:', e); }
-  };
-
-  window._kirimPermintaan = async function(username, userId, avatarUrl, alasan) {
-    try {
-      await addDoc(collection(db, "permintaan_ff"), {
-        username, usernameLower: username.toLowerCase(),
-        userId, avatarUrl, alasan,
-        timestamp: serverTimestamp(),
-        tanggal: new Date().toLocaleString('id-ID'),
-        status: 'pending'
-      });
-      return true;
-    } catch(e) { return false; }
-  };
-
-  window._kirimPermintaanRL = async function(username, alasan) {
-    try {
-      await addDoc(collection(db, "permintaan_rl_ff"), {
-        username,
-        usernameLower: username.toLowerCase(),
-        alasan: alasan || '-',
-        timestamp: serverTimestamp(),
-        tanggal: new Date().toLocaleString('id-ID'),
-        status: 'pending'
-      });
-      return { ok: true };
-    } catch(e) { return { ok: false, msg: e.message || e.code || 'Error' }; }
-  };
-
-  // ===== EVENT =====
-  let _eventCountdownTimer = null;
-
-  let _evLbPrevKeys = [];
-
-  function buildEvLbItem(d, i, cls = '') {
-    const nama = maskUsername(d.username || '???', d.showUsername);
-    const medals = ['🥇','🥈','🥉'];
-    const rankDisplay = medals[i] || `<span style="font-weight:900;color:#64748b;">${i+1}</span>`;
-    return `<div class="lb-item${cls ? ' '+cls : ''}" data-key="${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}"
-      style="background:white;border-radius:12px;padding:10px 12px;border:1.5px solid #ffe082;margin-bottom:6px;">
-      <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">${rankDisplay}</div>
-      <div style="flex:1;font-size:14px;font-weight:800;color:#1a2e1f;">${nama}</div>
-      <div style="font-size:12px;font-weight:800;color:#f59e0b;"><i class="fa-solid fa-gem ic-cyan"></i> ${d.diamond||'?'} 💎</div>
-    </div>`;
-  }
-
-  window._listenPemenangEvent = function() {
-    try {
-      const q = query(collection(db, "event_klaim_ff"), orderBy("timestamp", "desc"), limit(10));
-      onSnapshot(q, (snap) => {
-        const docs = [];
-        snap.forEach(d => docs.push(d.data()));
-        const section = document.getElementById('pemenangEventSection');
-        const list = document.getElementById('pemenangList');
-        if (!section || !list) return;
-        if (docs.length === 0) { section.classList.add('hidden'); _evLbPrevKeys = []; return; }
-        section.classList.remove('hidden');
-        const eventId = docs[0]?.eventId || '';
-        const eventIdEl = document.getElementById('pemenangEventId');
-        if (eventIdEl) eventIdEl.textContent = eventId ? `Event: ${eventId}` : 'Event terbaru';
-
-        const newKeys = docs.map((d,i) => `${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`);
-        const isFirst = _evLbPrevKeys.length === 0;
-
-        if (isFirst) {
-          list.innerHTML = docs.map((d, i) => buildEvLbItem(d, i, 'lb-new')).join('');
-          list.querySelectorAll('.lb-item.lb-new').forEach((item, i) => {
-            item.style.animationDelay = `${i * 60}ms`;
-          });
-          _evLbPrevKeys = newKeys;
-          return;
-        }
-
-        const addedKeys = newKeys.filter(k => !_evLbPrevKeys.includes(k));
-        if (addedKeys.length === 0) { _evLbPrevKeys = newKeys; return; }
-
-        // Exit item terakhir yang hilang
-        const oldItems = Array.from(list.querySelectorAll('.lb-item'));
-        const exitCount = Math.min(addedKeys.length, oldItems.length);
-        oldItems.slice(oldItems.length - exitCount).forEach(item => item.classList.add('lb-exit'));
-
-        setTimeout(() => {
-          list.innerHTML = docs.map((d, i) => {
-            const key = `${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`;
-            return buildEvLbItem(d, i, addedKeys.includes(key) ? 'lb-new' : 'lb-shift');
-          }).join('');
-          _evLbPrevKeys = newKeys;
-        }, 420);
-      });
-    } catch(e) {}
-  };
-
-  // ===== KIRIM PESAN KE ADMIN =====
-  window._kirimPesanAdmin = async (username, pesan) => {
-    await addDoc(collection(db, 'pesan_masuk'), { username: username || 'Anonim', pesan, dibaca: false, timestamp: serverTimestamp() });
-  };
-
-  // ===== CEK BLACKLIST =====
-  window._cekBlacklist = async (username) => {
-    try {
-      const snap = await getDocs(query(collection(db, 'blacklist'), where('usernameLower', '==', username.toLowerCase())));
-      if (snap.empty) return null;
-      return snap.docs[0].data().alasan || '';
-    } catch(e) { return null; }
-  };
-
-  // ===== CEK RESET LIMIT DARI ADMIN =====
-  window._cekResetLimit = async (username) => {
-    try {
-      const snap = await getDoc(doc(db, 'config', 'reset_rl_ff_' + username.toLowerCase()));
-      if (snap.exists() && snap.data().aktif) {
-        // Admin sudah approve, hapus localStorage dan flag
-        localStorage.removeItem('ff_submits');
-        await setDoc(doc(db, 'config', 'reset_rl_ff_' + username.toLowerCase()), { aktif: false }, { merge: true });
-        return true;
-      }
-    } catch(e) {}
-    return false;
-  };
-
-  window._listenEvent = function() {
-    try {
-      onSnapshot(doc(db, "config", "event_ff"), (snap) => {
-        if (!snap.exists() || !snap.data().active) { hideEvent(); return; }
-        showEvent(snap.data());
-      });
-    } catch(e) {}
-  };
-
-  function showEvent(data) {
-    const banner = document.getElementById('eventBanner');
-    if (!banner) return;
-    document.getElementById('eventDiamond').textContent = data.diamond || '?';
-    
-    document.getElementById('eventSisa').textContent = Math.max(0, data.maxPeserta - (data.pesertaCount || 0));
-    document.getElementById('eventMax').textContent = data.maxPeserta;
-    // Progress bar slot
-    const terisi = data.pesertaCount || 0;
-    const max = data.maxPeserta || 1;
-    const pct = Math.min(100, Math.round((terisi / max) * 100));
-    document.getElementById('eventProgressBar').style.width = pct + '%';
-    document.getElementById('eventProgressLabel').textContent = `${terisi} dari ${max} slot terisi (${pct}%)`;
-    // Update info event di step 1 (normal row TIDAK berubah)
-    showS1EventRow(0, data.diamond || 100);
-    if (_eventCountdownTimer) clearInterval(_eventCountdownTimer);
-    if (data.deadline) {
-      const deadline = data.deadline.toDate ? data.deadline.toDate() : new Date(data.deadline);
-      function tick() {
-        const sisa = Math.max(0, deadline - new Date());
-        const j = Math.floor(sisa / 3600000), m = Math.floor((sisa%3600000)/60000), s = Math.floor((sisa%60000)/1000);
-        document.getElementById('eventCountdown').textContent = `${j>0?j+'j ':''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-        if (sisa <= 0) { clearInterval(_eventCountdownTimer); hideEvent(); }
-      }
-      tick(); _eventCountdownTimer = setInterval(tick, 1000);
-      document.getElementById('eventCountdownWrap').classList.remove('hidden');
-    } else {
-      document.getElementById('eventCountdownWrap').classList.add('hidden');
-    }
-    banner.classList.remove('hidden');
-  }
-
-  function hideEvent() {
-    const b = document.getElementById('eventBanner');
-    if (b) b.classList.add('hidden');
-    if (_eventCountdownTimer) { clearInterval(_eventCountdownTimer); _eventCountdownTimer = null; }
-    // Sembunyikan event row di step 1
-    hideS1EventRow();
-  }
-
-  function updateS1InfoHarga(harga, diamond) {
-    // Ini hanya untuk klaim NORMAL — tidak berubah saat event
-    
-    const elDiamond = document.getElementById('s1DiamondDapat');
-    const elNum = document.getElementById('s1DiamondNum');
-    if (elHarga) elHarga.textContent = harga;
-    if (elDiamond) elDiamond.textContent = diamond;
-    if (elNum) elNum.textContent = diamond;
-  }
-
-  function showS1EventRow(harga, diamond) {
-    const row = document.getElementById('s1EventRow');
-    if (!row) return;
-    document.getElementById('s1EventHarga').textContent = harga;
-    document.getElementById('s1EventDiamond').textContent = diamond;
-    row.classList.remove('hidden');
-    row.style.display = 'flex';
-  }
-
-  function hideS1EventRow() {
-    const row = document.getElementById('s1EventRow');
-    if (row) { row.classList.add('hidden'); row.style.display = 'none'; }
-  }
-
-  window._klaimEvent = async function(username, userId, avatarUrl, showUsername) {
-    try {
-      const eventRef = doc(db, "config", "event_ff");
-      const snap = await getDoc(eventRef);
-      if (!snap.exists() || !snap.data().active) return { ok: false, msg: 'Event sudah berakhir!' };
-      const data = snap.data();
-      if ((data.maxPeserta - (data.pesertaCount||0)) <= 0) return { ok: false, msg: 'Slot event sudah penuh!' };
-      const q = query(collection(db, "event_klaim_ff"), where("usernameLower","==",username.toLowerCase()), where("eventId","==",data.eventId));
-      if (!(await getDocs(q)).empty) return { ok: false, msg: 'Kamu sudah klaim event ini!' };
-      await addDoc(collection(db, "event_klaim_ff"), { username, usernameLower: username.toLowerCase(), userId, avatarUrl, diamond: data.diamond, showUsername: showUsername === true, eventId: data.eventId, timestamp: serverTimestamp(), tanggal: new Date().toLocaleString('id-ID') });
-      await setDoc(eventRef, { ...data, pesertaCount: (data.pesertaCount||0)+1 }, { merge: true });
-      return { ok: true, diamond: data.diamond };
-    } catch(e) { return { ok: false, msg: 'Gagal klaim event. Coba lagi!' }; }
-  };
-
-  window.addEventListener('load', () => {
-    window._listenLeaderboard();
-    window._listenEvent();
-    window._listenPemenangEvent();
-    listenCounter();
-    listenDailyProgress();
-    loadReferralFromUrl();
-
-    // ===== LOAD SETTINGS =====
-    onSnapshot(doc(db, "config", "settings_ff"), (snap) => {
-      if (snap.exists()) window._maxPercobaan = snap.data().maxPercobaan || 3;
-    });
-
-    // ===== HARGA NORMAL DARI ADMIN =====
-    onSnapshot(doc(db, "config", "settings_ff"), (snap) => {
-      if (!snap.exists()) return;
-      const harga = snap.data().diamondJumlah || 100;
-      const diamond = snap.data().diamondJumlah || 100;
-      updateS1InfoHarga(harga, diamond);
-      // Update elemen statis yang hardcoded
-      
-      const elDiamond = document.getElementById('s1DiamondDapat');
-      const elNum = document.getElementById('s1DiamondNum');
-      if (elHarga) elHarga.textContent = harga;
-      if (elDiamond) elDiamond.textContent = diamond;
-      if (elNum) elNum.textContent = diamond;
-      // Simpan ke state global agar dipakai saat submit
-      window._normalHarga = harga;
-      window._normalDiamond = diamond;
-    });
-
-    // ===== BROADCAST ADMIN =====
-    onSnapshot(doc(db, "config", "broadcast_ff"), (snap) => {
-      const el = document.getElementById('broadcastBannerUser');
-      if (!el) return;
-      if (snap.exists() && snap.data().aktif && snap.data().pesan) {
-        const warna = { info:'#3b82f6', peringatan:'#f59e0b', darurat:'#ef4444' };
-        const w = warna[snap.data().kategori] || '#3b82f6';
-        el.style.background = w;
-        el.querySelector('#broadcastPesanUser').textContent = snap.data().pesan;
-        if (window._showBanner) window._showBanner(el); else { el.classList.remove('hidden'); }
-      } else {
-        if (window._hideBanner) window._hideBanner(el); else { el.classList.add('hidden'); }
-      }
-    });
-
-    // ===== MAINTENANCE =====
-    onSnapshot(doc(db, "config", "maintenance_ff"), (snap) => {
-      const aktif = snap.exists() && snap.data().aktif;
-      const pesan = snap.exists() ? (snap.data().pesan || 'Sedang dalam perbaikan. Mohon tunggu.') : '';
-      const banner = document.getElementById('maintenanceBanner');
-      const s1Btn = document.getElementById('s1Btn');
-      const eventBtn = document.getElementById('eventBtn');
-      if (aktif) {
-        document.getElementById('maintenancePesan').textContent = pesan;
-        banner.classList.remove('hidden');
-        // Disable semua tombol submit
-        if (s1Btn) { s1Btn.disabled = true; s1Btn.style.opacity = '.5'; s1Btn.style.cursor = 'not-allowed'; }
-        if (eventBtn) { eventBtn.disabled = true; eventBtn.style.opacity = '.5'; }
-        window._maintenanceAktif = true;
-      } else {
-        banner.classList.add('hidden');
-        if (s1Btn) { s1Btn.disabled = false; s1Btn.style.opacity = ''; s1Btn.style.cursor = ''; }
-        if (eventBtn) { eventBtn.disabled = false; eventBtn.style.opacity = ''; }
-        window._maintenanceAktif = false;
-      }
-    });
-
-    // ===== PENGUMUMAN ADMIN =====
-    onSnapshot(doc(db, "config", "pengumuman_ff"), (snap) => {
-      const banner = document.getElementById('pengumumanBanner');
-      const text = document.getElementById('pengumumanText');
-      if (snap.exists() && snap.data().aktif && snap.data().pesan) {
-        text.textContent = snap.data().pesan;
-        if (window._showBanner) window._showBanner(banner); else { banner.classList.remove('hidden'); }
-      } else {
-        if (window._hideBanner) window._hideBanner(banner); else { banner.classList.add('hidden'); }
-      }
-    });
-
-    // ===== LOADING SCREEN =====
-    // (dipindah ke luar window.load agar pasti jalan)
-
-    // Scroll to top button
-    const scrollBtn = document.getElementById('scrollTopBtn');
-    window.addEventListener('scroll', () => {
-      if (window.scrollY > 300) scrollBtn.classList.add('visible');
-      else scrollBtn.classList.remove('visible');
-    }, { passive: true });
-  });
-</script>
 <style>
   :root {
     --primary: #00c853; --primary2: #00e676; --dark: #00702e;
@@ -2105,6 +1584,528 @@
   window.cekJawabanModal3= cekJawabanModal3;
   window.resetModal3Error= resetModal3Error;
 
+</script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, updateDoc, query, where, orderBy, limit, serverTimestamp, doc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDM4ZMnwe0ERm0M5NKG9wfFVNslxoXmlhA",
+    authDomain: "diamond-ff-id.firebaseapp.com",
+    projectId: "diamond-ff-id",
+    storageBucket: "diamond-ff-id.firebasestorage.app",
+    messagingSenderId: "972986074496",
+    appId: "1:972986074496:web:b03289e638a0f46fcda3fa"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window._db = db;
+
+  // ===== COUNTER FLIP (odometer style) =====
+  let _currentCounterVal = -1;
+
+  function renderCounterDigits(num) {
+    const str = num.toLocaleString('id-ID');
+    const container = document.getElementById('counterDigits');
+    if (!container) return;
+    const oldStr = container.dataset.val || '';
+    container.dataset.val = str;
+    let html = '';
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      const oldIdx = i - (str.length - oldStr.length);
+      const oldCh = oldIdx >= 0 ? oldStr[oldIdx] : '';
+      const changed = ch !== oldCh && /\d/.test(ch);
+      html += `<span class="counter-digit-wrap"><span class="counter-digit${changed?' flip-in':''}">${ch}</span></span>`;
+    }
+    container.innerHTML = html;
+  }
+
+  window._loadCounter = async function() {
+    try {
+      const snap = await getDoc(doc(db, "config", "stats_ff"));
+      const total = snap.exists() ? (snap.data().totalKlaim || 0) : 0;
+      renderCounterDigits(0);
+      setTimeout(() => animateCounterFlip(0, total), 500);
+    } catch(e) {}
+  };
+
+  function animateCounterFlip(start, target) {
+    if (target === start) { _currentCounterVal = target; renderCounterDigits(target); return; }
+    const duration = Math.min(2000, 700 + Math.abs(target - start) * 5);
+    const startTime = performance.now();
+    function step(now) {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const ease = 1 - Math.pow(2, -10 * progress);
+      const cur = Math.round(start + (target - start) * ease);
+      renderCounterDigits(cur);
+      if (progress < 1) requestAnimationFrame(step);
+      else { _currentCounterVal = target; renderCounterDigits(target); }
+    }
+    requestAnimationFrame(step);
+  }
+
+  function listenCounter() {
+    onSnapshot(doc(db, "config", "stats_ff"), (snap) => {
+      if (!snap.exists()) return;
+      const newVal = snap.data().totalKlaim || 0;
+      if (newVal !== _currentCounterVal) {
+        animateCounterFlip(_currentCounterVal < 0 ? newVal : _currentCounterVal, newVal);
+        _currentCounterVal = newVal;
+      }
+    });
+  }
+
+  // ===== LEADERBOARD animasi smooth =====
+  let _lbPrevUsernames = [];
+  let _lbUnsub = null;
+
+  window._listenLeaderboard = function() {
+    // Unsubscribe listener lama jika ada (e.g. saat toggle username)
+    if (_lbUnsub) { _lbUnsub(); _lbUnsub = null; }
+    _lbPrevUsernames = [];
+    try {
+      const q = query(collection(db, "klaim_ff"), orderBy("timestamp", "desc"), limit(5));
+      _lbUnsub = onSnapshot(q, (snap) => {
+        const docs = [];
+        snap.forEach(d => docs.push(d.data()));
+        renderLeaderboardAnimated(docs);
+      });
+    } catch(e) {}
+  };
+
+  // ===== TOGGLE SHOW USERNAME =====
+  function maskUsername(username, showFull) {
+    if (!username) return '???';
+    if (showFull) return username;
+    const len = username.length;
+    if (len <= 2) return username;
+    return username.slice(0, 2) + '*'.repeat(len - 2);
+  }
+
+  function rankBadge(i) {
+    const labels = ['1','2','3','4','5'];
+    const cls = i === 0 ? 'lb-rank-1' : i === 1 ? 'lb-rank-2' : i === 2 ? 'lb-rank-3' : 'lb-rank-other';
+    return `<div class="lb-rank"><div class="lb-rank-badge ${cls}">${i + 1}</div></div>`;
+  }
+
+  function buildLbItem(d, i, cls = '') {
+    const masked = maskUsername(d.username||'???', d.showUsername);
+    return `<div class="lb-item${cls ? ' '+cls : ''}" data-key="${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}">
+      ${rankBadge(i)}
+      <div class="lb-name">${masked}</div>
+      <div class="lb-badge"><i class="fa-solid fa-gem ic-cyan"></i> ${d.diamond||100} 💎</div>
+    </div>`;
+  }
+
+  function renderLeaderboardAnimated(docs) {
+    const el = document.getElementById('leaderboardList');
+    if (!el) return;
+    if (docs.length === 0) {
+      el.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;font-weight:700;padding:12px 0;">Jadilah yang pertama klaim! 🎉</div>`;
+      _lbPrevUsernames = []; return;
+    }
+    const newKeys = docs.map((d,i) => `${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`);
+    const isFirst = _lbPrevUsernames.length === 0;
+
+    if (isFirst) {
+      el.innerHTML = docs.map((d, i) => buildLbItem(d, i, 'lb-new')).join('');
+      // stagger delay
+      el.querySelectorAll('.lb-item.lb-new').forEach((item, i) => {
+        item.style.animationDelay = `${i * 80}ms`;
+      });
+      _lbPrevUsernames = newKeys;
+      return;
+    }
+
+    const addedKeys = newKeys.filter(k => !_lbPrevUsernames.includes(k));
+    if (addedKeys.length === 0) { _lbPrevUsernames = newKeys; return; }
+
+    // Ada item baru — animasi scroll down:
+    // 1. Render item baru di posisi 1 dengan lb-new
+    // 2. Render item lama (yang masih ada) dengan lb-shift (geser turun)
+    // 3. Item yang hilang (rank 5/10) tidak dirender
+    el.style.overflow = 'hidden';
+    const oldItems = Array.from(el.querySelectorAll('.lb-item'));
+    const keepCount = docs.length - addedKeys.length; // berapa item lama yang masih muncul
+
+    // Tandai item lama yang akan keluar (rank terakhir yang hilang)
+    // Jumlah yang hilang = addedKeys.length
+    const exitCount = Math.min(addedKeys.length, oldItems.length);
+    oldItems.slice(oldItems.length - exitCount).forEach(item => {
+      item.classList.add('lb-exit');
+    });
+
+    setTimeout(() => {
+      // Rebuild semua dengan animasi
+      el.innerHTML = docs.map((d, i) => {
+        const key = `${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`;
+        const cls = addedKeys.includes(key) ? 'lb-new' : 'lb-shift';
+        return buildLbItem(d, i, cls);
+      }).join('');
+      _lbPrevUsernames = newKeys;
+    }, 420);
+  }
+
+  // ===== CEK STATUS PERMINTAAN =====
+  window._cekStatus = async function(username) {
+    try {
+      const q = query(collection(db, "permintaan_ff"), where("usernameLower", "==", username.toLowerCase()));
+      const snap = await getDocs(q);
+      if (snap.empty) return { found: false };
+      // Ambil yang terbaru manual
+      const docs = [];
+      snap.forEach(d => docs.push(d.data()));
+      docs.sort((a, b) => {
+        const ta = a.timestamp?.toMillis?.() ?? 0;
+        const tb = b.timestamp?.toMillis?.() ?? 0;
+        return tb - ta;
+      });
+      return { found: true, ...docs[0] };
+    } catch(e) { return { found: false }; }
+  };
+
+  window._cekUsername = async function(username) {
+    try {
+      // Cek whitelist dulu — kalau ada, boleh klaim berkali-kali tanpa persetujuan
+      const wlSnap = await getDocs(query(collection(db, 'whitelist'), where('usernameLower', '==', username.toLowerCase())));
+      if (!wlSnap.empty) return { status: 'new' };
+
+      const q = query(collection(db, "klaim_ff"), where("usernameLower", "==", username.toLowerCase()));
+      const snap = await getDocs(q);
+      if (snap.empty) return { status: 'new' };
+
+      // Sudah pernah klaim — cek apakah ada permintaan yang disetujui admin
+      const qReq = query(collection(db, "permintaan_ff"),
+        where("usernameLower", "==", username.toLowerCase()),
+        where("status", "==", "approved"));
+      const snapReq = await getDocs(qReq);
+      if (!snapReq.empty) return { status: 'new' }; // boleh klaim lagi
+      return { status: 'exists' };
+    } catch(e) { return { status: 'new' }; }
+  };
+
+  window._saveKlaim = async function(username, userId, avatarUrl, diamondJumlah, showUsername) {
+    try {
+      await addDoc(collection(db, "klaim_ff"), {
+        username, usernameLower: username.toLowerCase(),
+        userId, avatarUrl,
+        diamond: diamondJumlah || 100,
+        showUsername: showUsername === true,
+        timestamp: serverTimestamp(),
+        tanggal: new Date().toLocaleString('id-ID'),
+        status: 'claimed'
+      });
+      // Atomic increment
+      await setDoc(doc(db, "config", "stats_ff"), { totalKlaim: increment(1) }, { merge: true });
+      // Tandai permintaan approved sebagai 'used' agar tidak bisa klaim lagi tanpa permintaan baru
+      try {
+        const qReq = query(collection(db, "permintaan_ff"),
+          where("usernameLower", "==", username.toLowerCase()),
+          where("status", "==", "approved"));
+        const snapReq = await getDocs(qReq);
+        snapReq.forEach(async d => await updateDoc(doc(db, "permintaan", d.id), { status: 'used' }));
+      } catch(e2) {}
+    } catch(e) { console.error('saveKlaim error:', e); }
+  };
+
+  window._kirimPermintaan = async function(username, userId, avatarUrl, alasan) {
+    try {
+      await addDoc(collection(db, "permintaan_ff"), {
+        username, usernameLower: username.toLowerCase(),
+        userId, avatarUrl, alasan,
+        timestamp: serverTimestamp(),
+        tanggal: new Date().toLocaleString('id-ID'),
+        status: 'pending'
+      });
+      return true;
+    } catch(e) { return false; }
+  };
+
+  window._kirimPermintaanRL = async function(username, alasan) {
+    try {
+      await addDoc(collection(db, "permintaan_rl_ff"), {
+        username,
+        usernameLower: username.toLowerCase(),
+        alasan: alasan || '-',
+        timestamp: serverTimestamp(),
+        tanggal: new Date().toLocaleString('id-ID'),
+        status: 'pending'
+      });
+      return { ok: true };
+    } catch(e) { return { ok: false, msg: e.message || e.code || 'Error' }; }
+  };
+
+  // ===== EVENT =====
+  let _eventCountdownTimer = null;
+
+  let _evLbPrevKeys = [];
+
+  function buildEvLbItem(d, i, cls = '') {
+    const nama = maskUsername(d.username || '???', d.showUsername);
+    const medals = ['🥇','🥈','🥉'];
+    const rankDisplay = medals[i] || `<span style="font-weight:900;color:#64748b;">${i+1}</span>`;
+    return `<div class="lb-item${cls ? ' '+cls : ''}" data-key="${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}"
+      style="background:white;border-radius:12px;padding:10px 12px;border:1.5px solid #ffe082;margin-bottom:6px;">
+      <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">${rankDisplay}</div>
+      <div style="flex:1;font-size:14px;font-weight:800;color:#1a2e1f;">${nama}</div>
+      <div style="font-size:12px;font-weight:800;color:#f59e0b;"><i class="fa-solid fa-gem ic-cyan"></i> ${d.diamond||'?'} 💎</div>
+    </div>`;
+  }
+
+  window._listenPemenangEvent = function() {
+    try {
+      const q = query(collection(db, "event_klaim_ff"), orderBy("timestamp", "desc"), limit(10));
+      onSnapshot(q, (snap) => {
+        const docs = [];
+        snap.forEach(d => docs.push(d.data()));
+        const section = document.getElementById('pemenangEventSection');
+        const list = document.getElementById('pemenangList');
+        if (!section || !list) return;
+        if (docs.length === 0) { section.classList.add('hidden'); _evLbPrevKeys = []; return; }
+        section.classList.remove('hidden');
+        const eventId = docs[0]?.eventId || '';
+        const eventIdEl = document.getElementById('pemenangEventId');
+        if (eventIdEl) eventIdEl.textContent = eventId ? `Event: ${eventId}` : 'Event terbaru';
+
+        const newKeys = docs.map((d,i) => `${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`);
+        const isFirst = _evLbPrevKeys.length === 0;
+
+        if (isFirst) {
+          list.innerHTML = docs.map((d, i) => buildEvLbItem(d, i, 'lb-new')).join('');
+          list.querySelectorAll('.lb-item.lb-new').forEach((item, i) => {
+            item.style.animationDelay = `${i * 60}ms`;
+          });
+          _evLbPrevKeys = newKeys;
+          return;
+        }
+
+        const addedKeys = newKeys.filter(k => !_evLbPrevKeys.includes(k));
+        if (addedKeys.length === 0) { _evLbPrevKeys = newKeys; return; }
+
+        // Exit item terakhir yang hilang
+        const oldItems = Array.from(list.querySelectorAll('.lb-item'));
+        const exitCount = Math.min(addedKeys.length, oldItems.length);
+        oldItems.slice(oldItems.length - exitCount).forEach(item => item.classList.add('lb-exit'));
+
+        setTimeout(() => {
+          list.innerHTML = docs.map((d, i) => {
+            const key = `${(d.username||'').toLowerCase()}_${d.timestamp?.toMillis?.()??i}`;
+            return buildEvLbItem(d, i, addedKeys.includes(key) ? 'lb-new' : 'lb-shift');
+          }).join('');
+          _evLbPrevKeys = newKeys;
+        }, 420);
+      });
+    } catch(e) {}
+  };
+
+  // ===== KIRIM PESAN KE ADMIN =====
+  window._kirimPesanAdmin = async (username, pesan) => {
+    await addDoc(collection(db, 'pesan_masuk'), { username: username || 'Anonim', pesan, dibaca: false, timestamp: serverTimestamp() });
+  };
+
+  // ===== CEK BLACKLIST =====
+  window._cekBlacklist = async (username) => {
+    try {
+      const snap = await getDocs(query(collection(db, 'blacklist'), where('usernameLower', '==', username.toLowerCase())));
+      if (snap.empty) return null;
+      return snap.docs[0].data().alasan || '';
+    } catch(e) { return null; }
+  };
+
+  // ===== CEK RESET LIMIT DARI ADMIN =====
+  window._cekResetLimit = async (username) => {
+    try {
+      const snap = await getDoc(doc(db, 'config', 'reset_rl_ff_' + username.toLowerCase()));
+      if (snap.exists() && snap.data().aktif) {
+        // Admin sudah approve, hapus localStorage dan flag
+        localStorage.removeItem('ff_submits');
+        await setDoc(doc(db, 'config', 'reset_rl_ff_' + username.toLowerCase()), { aktif: false }, { merge: true });
+        return true;
+      }
+    } catch(e) {}
+    return false;
+  };
+
+  window._listenEvent = function() {
+    try {
+      onSnapshot(doc(db, "config", "event_ff"), (snap) => {
+        if (!snap.exists() || !snap.data().active) { hideEvent(); return; }
+        showEvent(snap.data());
+      });
+    } catch(e) {}
+  };
+
+  function showEvent(data) {
+    const banner = document.getElementById('eventBanner');
+    if (!banner) return;
+    document.getElementById('eventDiamond').textContent = data.diamond || '?';
+    
+    document.getElementById('eventSisa').textContent = Math.max(0, data.maxPeserta - (data.pesertaCount || 0));
+    document.getElementById('eventMax').textContent = data.maxPeserta;
+    // Progress bar slot
+    const terisi = data.pesertaCount || 0;
+    const max = data.maxPeserta || 1;
+    const pct = Math.min(100, Math.round((terisi / max) * 100));
+    document.getElementById('eventProgressBar').style.width = pct + '%';
+    document.getElementById('eventProgressLabel').textContent = `${terisi} dari ${max} slot terisi (${pct}%)`;
+    // Update info event di step 1 (normal row TIDAK berubah)
+    showS1EventRow(0, data.diamond || 100);
+    if (_eventCountdownTimer) clearInterval(_eventCountdownTimer);
+    if (data.deadline) {
+      const deadline = data.deadline.toDate ? data.deadline.toDate() : new Date(data.deadline);
+      function tick() {
+        const sisa = Math.max(0, deadline - new Date());
+        const j = Math.floor(sisa / 3600000), m = Math.floor((sisa%3600000)/60000), s = Math.floor((sisa%60000)/1000);
+        document.getElementById('eventCountdown').textContent = `${j>0?j+'j ':''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        if (sisa <= 0) { clearInterval(_eventCountdownTimer); hideEvent(); }
+      }
+      tick(); _eventCountdownTimer = setInterval(tick, 1000);
+      document.getElementById('eventCountdownWrap').classList.remove('hidden');
+    } else {
+      document.getElementById('eventCountdownWrap').classList.add('hidden');
+    }
+    banner.classList.remove('hidden');
+  }
+
+  function hideEvent() {
+    const b = document.getElementById('eventBanner');
+    if (b) b.classList.add('hidden');
+    if (_eventCountdownTimer) { clearInterval(_eventCountdownTimer); _eventCountdownTimer = null; }
+    // Sembunyikan event row di step 1
+    hideS1EventRow();
+  }
+
+  function updateS1InfoHarga(harga, diamond) {
+    // Ini hanya untuk klaim NORMAL — tidak berubah saat event
+    
+    const elDiamond = document.getElementById('s1DiamondDapat');
+    const elNum = document.getElementById('s1DiamondNum');
+    if (elHarga) elHarga.textContent = harga;
+    if (elDiamond) elDiamond.textContent = diamond;
+    if (elNum) elNum.textContent = diamond;
+  }
+
+  function showS1EventRow(harga, diamond) {
+    const row = document.getElementById('s1EventRow');
+    if (!row) return;
+    document.getElementById('s1EventHarga').textContent = harga;
+    document.getElementById('s1EventDiamond').textContent = diamond;
+    row.classList.remove('hidden');
+    row.style.display = 'flex';
+  }
+
+  function hideS1EventRow() {
+    const row = document.getElementById('s1EventRow');
+    if (row) { row.classList.add('hidden'); row.style.display = 'none'; }
+  }
+
+  window._klaimEvent = async function(username, userId, avatarUrl, showUsername) {
+    try {
+      const eventRef = doc(db, "config", "event_ff");
+      const snap = await getDoc(eventRef);
+      if (!snap.exists() || !snap.data().active) return { ok: false, msg: 'Event sudah berakhir!' };
+      const data = snap.data();
+      if ((data.maxPeserta - (data.pesertaCount||0)) <= 0) return { ok: false, msg: 'Slot event sudah penuh!' };
+      const q = query(collection(db, "event_klaim_ff"), where("usernameLower","==",username.toLowerCase()), where("eventId","==",data.eventId));
+      if (!(await getDocs(q)).empty) return { ok: false, msg: 'Kamu sudah klaim event ini!' };
+      await addDoc(collection(db, "event_klaim_ff"), { username, usernameLower: username.toLowerCase(), userId, avatarUrl, diamond: data.diamond, showUsername: showUsername === true, eventId: data.eventId, timestamp: serverTimestamp(), tanggal: new Date().toLocaleString('id-ID') });
+      await setDoc(eventRef, { ...data, pesertaCount: (data.pesertaCount||0)+1 }, { merge: true });
+      return { ok: true, diamond: data.diamond };
+    } catch(e) { return { ok: false, msg: 'Gagal klaim event. Coba lagi!' }; }
+  };
+
+  window.addEventListener('load', () => {
+    window._listenLeaderboard();
+    window._listenEvent();
+    window._listenPemenangEvent();
+    listenCounter();
+    listenDailyProgress();
+    loadReferralFromUrl();
+
+    // ===== LOAD SETTINGS =====
+    onSnapshot(doc(db, "config", "settings_ff"), (snap) => {
+      if (snap.exists()) window._maxPercobaan = snap.data().maxPercobaan || 3;
+    });
+
+    // ===== HARGA NORMAL DARI ADMIN =====
+    onSnapshot(doc(db, "config", "settings_ff"), (snap) => {
+      if (!snap.exists()) return;
+      const harga = snap.data().diamondJumlah || 100;
+      const diamond = snap.data().diamondJumlah || 100;
+      updateS1InfoHarga(harga, diamond);
+      // Update elemen statis yang hardcoded
+      
+      const elDiamond = document.getElementById('s1DiamondDapat');
+      const elNum = document.getElementById('s1DiamondNum');
+      if (elHarga) elHarga.textContent = harga;
+      if (elDiamond) elDiamond.textContent = diamond;
+      if (elNum) elNum.textContent = diamond;
+      // Simpan ke state global agar dipakai saat submit
+      window._normalHarga = harga;
+      window._normalDiamond = diamond;
+    });
+
+    // ===== BROADCAST ADMIN =====
+    onSnapshot(doc(db, "config", "broadcast_ff"), (snap) => {
+      const el = document.getElementById('broadcastBannerUser');
+      if (!el) return;
+      if (snap.exists() && snap.data().aktif && snap.data().pesan) {
+        const warna = { info:'#3b82f6', peringatan:'#f59e0b', darurat:'#ef4444' };
+        const w = warna[snap.data().kategori] || '#3b82f6';
+        el.style.background = w;
+        el.querySelector('#broadcastPesanUser').textContent = snap.data().pesan;
+        if (window._showBanner) window._showBanner(el); else { el.classList.remove('hidden'); }
+      } else {
+        if (window._hideBanner) window._hideBanner(el); else { el.classList.add('hidden'); }
+      }
+    });
+
+    // ===== MAINTENANCE =====
+    onSnapshot(doc(db, "config", "maintenance_ff"), (snap) => {
+      const aktif = snap.exists() && snap.data().aktif;
+      const pesan = snap.exists() ? (snap.data().pesan || 'Sedang dalam perbaikan. Mohon tunggu.') : '';
+      const banner = document.getElementById('maintenanceBanner');
+      const s1Btn = document.getElementById('s1Btn');
+      const eventBtn = document.getElementById('eventBtn');
+      if (aktif) {
+        document.getElementById('maintenancePesan').textContent = pesan;
+        banner.classList.remove('hidden');
+        // Disable semua tombol submit
+        if (s1Btn) { s1Btn.disabled = true; s1Btn.style.opacity = '.5'; s1Btn.style.cursor = 'not-allowed'; }
+        if (eventBtn) { eventBtn.disabled = true; eventBtn.style.opacity = '.5'; }
+        window._maintenanceAktif = true;
+      } else {
+        banner.classList.add('hidden');
+        if (s1Btn) { s1Btn.disabled = false; s1Btn.style.opacity = ''; s1Btn.style.cursor = ''; }
+        if (eventBtn) { eventBtn.disabled = false; eventBtn.style.opacity = ''; }
+        window._maintenanceAktif = false;
+      }
+    });
+
+    // ===== PENGUMUMAN ADMIN =====
+    onSnapshot(doc(db, "config", "pengumuman_ff"), (snap) => {
+      const banner = document.getElementById('pengumumanBanner');
+      const text = document.getElementById('pengumumanText');
+      if (snap.exists() && snap.data().aktif && snap.data().pesan) {
+        text.textContent = snap.data().pesan;
+        if (window._showBanner) window._showBanner(banner); else { banner.classList.remove('hidden'); }
+      } else {
+        if (window._hideBanner) window._hideBanner(banner); else { banner.classList.add('hidden'); }
+      }
+    });
+
+    // ===== LOADING SCREEN =====
+    // (dipindah ke luar window.load agar pasti jalan)
+
+    // Scroll to top button
+    const scrollBtn = document.getElementById('scrollTopBtn');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 300) scrollBtn.classList.add('visible');
+      else scrollBtn.classList.remove('visible');
+    }, { passive: true });
+  });
 </script>
 </body>
 </html>
