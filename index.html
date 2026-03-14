@@ -948,8 +948,8 @@
 
   // ===== MODAL =====
   function bukaModal() {
-    const harga = document.getElementById('tutorialHarga').textContent;
-    document.getElementById('modalMsg').textContent = `Pastikan data kamu sudah benar sebelum melanjutkan!`;
+    const uid = document.getElementById('uInput')?.value?.trim() || '';
+    document.getElementById('modalMsg').textContent = `Pastikan UID ${uid} adalah akun Free Fire kamu!`;
     const btnYes = document.getElementById('modalBtnYes');
     btnYes.disabled = true; btnYes.innerHTML = '(<span id="modalCount">3</span>) Sudah';
     document.getElementById('modalKonfirmasi').classList.remove('hidden');
