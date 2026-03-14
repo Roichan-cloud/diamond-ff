@@ -1092,7 +1092,7 @@
     <div class="c-sub">Masukkan UID Free Fire kamu untuk mulai klaim</div>
     <div class="rbx-hero">
       <img src="diamond.png" alt="Diamond" style="width:56px;height:56px;object-fit:contain;animation:flip 4s ease-in-out infinite;flex-shrink:0;" />
-      <div><div class="rbx-num" id="s1DiamondNum">50</div><div class="rbx-lbl">Diamond Gratis FF</div></div>
+      <div><div class="rbx-num" id="s1DiamondNum">100</div><div class="rbx-lbl">Diamond Gratis FF</div></div>
     </div>
     <!-- INFO HARGA GAMEPASS -->
     <div id="s1InfoHarga" style="background:linear-gradient(135deg,#f0fff6,#e8fff2);border:2px solid #b2f5d0;border-radius:16px;padding:14px 16px;margin-bottom:16px;">
@@ -1293,8 +1293,8 @@
 </div>
 
 <footer>
-  <p>Dibuat dengan <i class="fa-solid fa-heart" style="color:#ef4444;"></i> untuk komunitas Roblox Indonesia</p>
-  <p style="margin-top:4px"><a href="https://create.roblox.com" target="_blank">create.roblox.com</a> · <a href="https://roblox.com" target="_blank">roblox.com</a></p>
+  <p>Dibuat dengan <i class="fa-solid fa-heart" style="color:#ef4444;"></i> untuk komunitas Free Fire Indonesia</p>
+  <p style="margin-top:4px">Diamond Gratis FF 💎</p>
 </footer>
 
 <script>
@@ -1843,7 +1843,7 @@
   let _avatarPreviewTimer = null;
   let _avatarPreviewCache = {};
 
-  async function onUsernameInput(val) // alias {
+  async function onUsernameInput(val) {
     const wrap = document.getElementById('avatarPreviewWrap');
     if (!val || val.length < 6) { wrap.style.display = 'none'; return; }
     wrap.style.display = 'flex';
@@ -2063,7 +2063,7 @@
       setTimeout(() => confetti({ particleCount: 80, spread: 160, origin:{y:.3, x:.5}, colors, startVelocity: 65, scalar: 1.5 }), 1000);
     }
   }
-</script>
+
   document.addEventListener('click', function(e) {
     const btn = e.target.closest('.btn, .btn-event');
     if (!btn) return;
@@ -2096,6 +2096,28 @@
   }
   window._showBanner = showBanner;
   window._hideBanner = hideBanner;
+  // ===== EXPOSE KE WINDOW =====
+  window.step1Next       = step1Next;
+  window.klaimEvent      = klaimEvent;
+  window.kirimPermintaan = kirimPermintaan;
+  window.back1           = back1;
+  window.resetAll        = resetAll;
+  window.tampilFormRL    = tampilFormRL;
+  window.sembunyiFormRL  = sembunyiFormRL;
+  window.kirimPermintaanRL = kirimPermintaanRL;
+  window.shareWA         = shareWA;
+  window.copyReferralCode= copyReferralCode;
+  window.kirimPesanAdmin = kirimPesanAdmin;
+  window.onToggleUsername= onToggleUsername;
+  window.onUsernameInput = onUsernameInput;
+  window.validateRefInput= validateRefInput;
+  window.tutupModal2     = tutupModal2;
+  window.konfirmasiYes2  = konfirmasiYes2;
+  window.toggleModal2Btn = toggleModal2Btn;
+  window.tutupModal3     = tutupModal3;
+  window.cekJawabanModal3= cekJawabanModal3;
+  window.resetModal3Error= resetModal3Error;
+
 </script>
 </body>
 </html>
